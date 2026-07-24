@@ -1,0 +1,12 @@
+{
+  "schema_version": "1.0.0",
+  "contract_revision": "2026-07-24.contract-first.1",
+  "contract_bundle_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+  "run_id": "20260724T140000Z_failure-review-loop_a1b2c3",
+  "project_id": "failure-review-loop",
+  "task_episodes": [],
+  "excluded_evidence": [],
+  "problem_instances": [],
+  "issue_clusters": [],
+  "optimizer_eligible_cluster_ids": []
+}

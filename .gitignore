@@ -1,0 +1,7 @@
+node_modules/
+failure-review.config.json
+runs/*
+!runs/.gitkeep
+*.log
+.failure-review-locks/
+.env

@@ -1,0 +1,42 @@
+{
+  "schema_version": "1.0.0",
+  "contract_revision": "2026-07-24.contract-first.1",
+  "contract_bundle_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+  "run_id": "20260724T140000Z_failure-review-loop_a1b2c3",
+  "project_id": "failure-review-loop",
+  "improvement_target_ids": ["example-skill"],
+  "proposals": [
+    {
+      "proposal_id": "pr_acceptance",
+      "issue_cluster_id": "ic_0000000000000000",
+      "instance_count": 3,
+      "problem_instance_ids": ["pi_1", "pi_2", "pi_3"],
+      "evidence_ids": ["ev_1", "ev_2", "ev_3"],
+      "root_cause": "The workflow declares completion without acceptance evidence.",
+      "target_id": "example-skill",
+      "target_file": "C:/skills/example/SKILL.md",
+      "target_location": "Completion contract",
+      "minimal_change": "Require acceptance evidence before declaring completion.",
+      "behavior_before": "Completion may be declared after tool success.",
+      "behavior_after": "Completion requires user acceptance or verified criteria.",
+      "expected_metric_effects": [
+        { "metric": "attainment_rate", "direction": "increase" },
+        { "metric": "rework_count", "direction": "decrease" }
+      ],
+      "side_effects": ["More outcomes may remain unknown until acceptance is available."],
+      "scope_expansion_risk": "low",
+      "regression_tests": [
+        { "test_id": "original", "kind": "original_failure", "given": "A rejected result", "when": "Outcome is classified", "then": "It is not achieved" },
+        { "test_id": "adjacent", "kind": "adjacent_case", "given": "An accepted result", "when": "Outcome is classified", "then": "It is achieved" }
+      ]
+    }
+  ],
+  "dispositions": [
+    {
+      "issue_cluster_id": "ic_0000000000000000",
+      "status": "proposed",
+      "proposal_ids": ["pr_acceptance"],
+      "reason": "The allowed target contains the completion contract."
+    }
+  ]
+}

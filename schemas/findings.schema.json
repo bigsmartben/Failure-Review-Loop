@@ -1,0 +1,236 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://failure-review-loop.local/schemas/findings.schema.json",
+  "title": "Task Outcomes And Issue Findings",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "contract_revision", "contract_bundle_hash", "run_id", "project_id", "task_episodes", "excluded_evidence", "problem_instances", "issue_clusters", "optimizer_eligible_cluster_ids"],
+  "properties": {
+    "schema_version": { "type": "string", "const": "1.0.0" },
+    "contract_revision": { "const": "2026-07-24.contract-first.1" },
+    "contract_bundle_hash": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
+    "run_id": { "type": "string", "minLength": 1 },
+    "project_id": { "type": "string", "minLength": 1 },
+    "task_episodes": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/task_episode" }
+    },
+    "excluded_evidence": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/excluded_evidence" }
+    },
+    "problem_instances": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/problem_instance" }
+    },
+    "issue_clusters": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/issue_cluster" }
+    },
+    "optimizer_eligible_cluster_ids": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/cluster_id" }
+    }
+  },
+  "$defs": {
+    "evidence_id": {
+      "type": "string",
+      "pattern": "^ev_[a-zA-Z0-9_-]+$"
+    },
+    "cluster_id": {
+      "type": "string",
+      "pattern": "^ic_[a-f0-9]{16}$"
+    },
+    "pattern": {
+      "enum": ["repeated_clarification", "repeated_execution", "unmet_expectation"]
+    },
+    "root_cause_category": {
+      "enum": ["trigger_failure", "workflow_gap", "ambiguous_rule", "script_bug", "reference_gap", "template_issue", "environment_issue", "unclear_expectation"]
+    },
+    "task_episode": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["task_episode_id", "conversation_id", "goal", "expected_outcome", "start_sequence", "end_sequence", "context_status", "context_basis", "boundary_evidence_ids", "outcome_status", "outcome_basis", "acceptance_criteria", "evidence_ids", "outcome_evidence_ids", "interaction_events", "counts", "facts", "inferences", "unknowns"],
+      "properties": {
+        "task_episode_id": { "type": "string", "pattern": "^task_[a-zA-Z0-9_-]+$" },
+        "conversation_id": { "type": "string", "minLength": 1 },
+        "goal": { "type": "string", "minLength": 1 },
+        "expected_outcome": { "type": "string", "minLength": 1 },
+        "start_sequence": { "type": "integer", "minimum": 0 },
+        "end_sequence": { "type": "integer", "minimum": 0 },
+        "context_status": { "enum": ["complete", "left_truncated", "right_truncated", "both_truncated"] },
+        "context_basis": {
+          "enum": ["fully_observed", "left_boundary_continuation", "right_boundary_continuation", "both_boundary_continuation"]
+        },
+        "boundary_evidence_ids": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/evidence_id" }
+        },
+        "outcome_status": { "enum": ["achieved", "not_achieved", "unknown"] },
+        "outcome_basis": {
+          "enum": ["explicit_user_acceptance", "verified_acceptance_criteria", "explicit_user_rejection", "verified_expectation_mismatch", "insufficient_evidence"]
+        },
+        "acceptance_criteria": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/acceptance_criterion" }
+        },
+        "evidence_ids": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/evidence_id" }
+        },
+        "outcome_evidence_ids": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/evidence_id" }
+        },
+        "interaction_events": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/interaction_event" }
+        },
+        "counts": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["turn_count", "clarification_count", "repeated_clarification_count", "execution_attempt_count", "rework_count"],
+          "properties": {
+            "turn_count": { "type": "integer", "minimum": 1 },
+            "clarification_count": { "type": "integer", "minimum": 0 },
+            "repeated_clarification_count": { "type": "integer", "minimum": 0 },
+            "execution_attempt_count": { "type": "integer", "minimum": 0 },
+            "rework_count": { "type": "integer", "minimum": 0 }
+          }
+        },
+        "facts": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+        "inferences": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+        "unknowns": { "type": "array", "items": { "type": "string", "minLength": 1 } }
+      }
+    },
+    "excluded_evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["evidence_id", "reason_code", "explanation"],
+      "properties": {
+        "evidence_id": { "$ref": "#/$defs/evidence_id" },
+        "reason_code": {
+          "enum": ["non_goal_message", "administrative_message", "unsupported_goal_boundary"]
+        },
+        "explanation": { "type": "string", "minLength": 1 }
+      }
+    },
+    "acceptance_criterion": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["criterion_id", "description", "status", "verification_evidence_ids"],
+      "properties": {
+        "criterion_id": { "type": "string", "pattern": "^criterion_[a-zA-Z0-9_-]+$" },
+        "description": { "type": "string", "minLength": 1 },
+        "status": { "enum": ["passed", "failed", "unknown"] },
+        "verification_evidence_ids": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/evidence_id" }
+        }
+      }
+    },
+    "interaction_event": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["interaction_id", "kind", "repeated", "evidence_ids"],
+          "properties": {
+            "interaction_id": { "type": "string", "pattern": "^interaction_[a-zA-Z0-9_-]+$" },
+            "kind": { "const": "clarification" },
+            "repeated": { "type": "boolean" },
+            "evidence_ids": {
+              "type": "array",
+              "minItems": 1,
+              "uniqueItems": true,
+              "items": { "$ref": "#/$defs/evidence_id" }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["interaction_id", "kind", "rework", "evidence_ids"],
+          "properties": {
+            "interaction_id": { "type": "string", "pattern": "^interaction_[a-zA-Z0-9_-]+$" },
+            "kind": { "const": "execution_attempt" },
+            "rework": { "type": "boolean" },
+            "evidence_ids": {
+              "type": "array",
+              "minItems": 1,
+              "uniqueItems": true,
+              "items": { "$ref": "#/$defs/evidence_id" }
+            }
+          }
+        }
+      ]
+    },
+    "problem_instance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["problem_instance_id", "fingerprint", "task_episode_id", "conversation_id", "occurred_at", "pattern", "issue_signature", "signature_status", "root_cause_category", "severity", "summary", "evidence_ids", "facts", "inferences", "unknowns"],
+      "properties": {
+        "problem_instance_id": { "type": "string", "pattern": "^pi_[a-zA-Z0-9_-]+$" },
+        "fingerprint": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
+        "task_episode_id": { "type": "string", "pattern": "^task_[a-zA-Z0-9_-]+$" },
+        "conversation_id": { "type": "string", "minLength": 1 },
+        "occurred_at": { "type": "string", "format": "date-time" },
+        "pattern": { "$ref": "#/$defs/pattern" },
+        "issue_signature": { "type": "string", "pattern": "^[a-z0-9][a-z0-9_]{2,127}$" },
+        "signature_status": { "enum": ["registered", "candidate"] },
+        "root_cause_category": { "$ref": "#/$defs/root_cause_category" },
+        "severity": { "type": "integer", "minimum": 1 },
+        "summary": { "type": "string", "minLength": 1 },
+        "evidence_ids": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/evidence_id" }
+        },
+        "facts": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+        "inferences": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+        "unknowns": { "type": "array", "items": { "type": "string", "minLength": 1 } }
+      }
+    },
+    "issue_cluster": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["issue_cluster_id", "pattern", "issue_signature", "signature_status", "root_cause_category", "instance_count", "problem_instance_ids", "task_episode_ids", "severity_total", "root_cause", "root_cause_confidence", "evidence_ids"],
+      "properties": {
+        "issue_cluster_id": { "$ref": "#/$defs/cluster_id" },
+        "pattern": { "$ref": "#/$defs/pattern" },
+        "issue_signature": { "type": "string", "pattern": "^[a-z0-9][a-z0-9_]{2,127}$" },
+        "signature_status": { "enum": ["registered", "candidate"] },
+        "root_cause_category": { "$ref": "#/$defs/root_cause_category" },
+        "instance_count": { "type": "integer", "minimum": 1 },
+        "problem_instance_ids": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "type": "string", "pattern": "^pi_[a-zA-Z0-9_-]+$" }
+        },
+        "task_episode_ids": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "type": "string", "pattern": "^task_[a-zA-Z0-9_-]+$" }
+        },
+        "severity_total": { "type": "integer", "minimum": 1 },
+        "root_cause": { "type": "string", "minLength": 1 },
+        "root_cause_confidence": { "enum": ["high", "medium", "low", "unknown"] },
+        "evidence_ids": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/evidence_id" }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,43 @@
+{
+  "schema_version": "1.0.0",
+  "runs_dir": "../runs",
+  "codex_home": null,
+  "project_bindings": [
+    {
+      "project_id": "failure-review-loop",
+      "roots": [".."],
+      "marker_file": "failure-review.project.json",
+      "conversation_ids": [],
+      "improvement_target_ids": ["fixture-skill"]
+    }
+  ],
+  "improvement_targets": [
+    {
+      "id": "fixture-skill",
+      "type": "skill",
+      "path": "../fixtures/target-skill/SKILL.md"
+    }
+  ],
+  "models": {
+    "collector": {
+      "planned_name": "Luna",
+      "model": "gpt-5.6-terra",
+      "reasoning_effort": "low"
+    },
+    "analyst": {
+      "planned_name": "Sol",
+      "model": "gpt-5.6-sol",
+      "reasoning_effort": "high"
+    },
+    "optimizer": {
+      "planned_name": "Sol",
+      "model": "gpt-5.6-sol",
+      "reasoning_effort": "xhigh"
+    }
+  },
+  "privacy": {
+    "content_mode": "redact_secrets",
+    "retention_days": null,
+    "copy_raw_conversations": false
+  }
+}

@@ -1,0 +1,27 @@
+{
+  "schema_version": "1.0.0",
+  "run_id": "run",
+  "project_id": "project",
+  "improvement_target_ids": ["example-skill"],
+  "proposals": [
+    {
+      "proposal_id": "pr_bad",
+      "issue_cluster_id": "bad-cluster",
+      "instance_count": 2,
+      "problem_instance_ids": ["pi_1"],
+      "evidence_ids": [],
+      "root_cause": "",
+      "target_id": "example-skill",
+      "target_file": "",
+      "target_location": "",
+      "minimal_change": "",
+      "behavior_before": "",
+      "behavior_after": "",
+      "expected_metric_effects": [],
+      "side_effects": [],
+      "scope_expansion_risk": "high",
+      "regression_tests": []
+    }
+  ],
+  "dispositions": []
+}

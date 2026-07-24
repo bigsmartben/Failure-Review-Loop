@@ -1,0 +1,33 @@
+{
+  "schema_version": "1.0.0",
+  "run_id": "20260724T140000Z_failure-review-loop_a1b2c3",
+  "attempt": 1,
+  "status": "PENDING",
+  "parameters": {
+    "project_id": "failure-review-loop",
+    "window_start": "2026-07-24T00:00:00+08:00",
+    "window_end": "2026-07-25T00:00:00+08:00",
+    "timezone": "Asia/Shanghai",
+    "contract_revision": "2026-07-24.contract-first.1",
+    "contract_bundle_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+    "improvement_target_ids": ["example-skill"],
+    "improvement_targets": [
+      {
+        "id": "example-skill",
+        "type": "skill",
+        "path": "C:/skills/example/SKILL.md"
+      }
+    ],
+    "target_set_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+  },
+  "created_at": "2026-07-24T14:00:00Z",
+  "updated_at": "2026-07-24T14:00:00Z",
+  "stages": {
+    "collector": { "status": "pending", "started_at": null, "completed_at": null, "artifact": null },
+    "analyst": { "status": "pending", "started_at": null, "completed_at": null, "artifact": null },
+    "metrics": { "status": "pending", "started_at": null, "completed_at": null, "artifact": null },
+    "trend": { "status": "pending", "started_at": null, "completed_at": null, "artifact": null },
+    "optimizer": { "status": "pending", "started_at": null, "completed_at": null, "artifact": null }
+  },
+  "failure": null
+}

@@ -1,0 +1,57 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://failure-review-loop.local/schemas/evidence.schema.json",
+  "title": "Collected Conversation Evidence",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "contract_revision", "contract_bundle_hash", "run_id", "project_id", "window_start", "window_end", "conversations", "records"],
+  "properties": {
+    "schema_version": { "type": "string", "const": "1.0.0" },
+    "contract_revision": { "const": "2026-07-24.contract-first.1" },
+    "contract_bundle_hash": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
+    "run_id": { "type": "string", "minLength": 1 },
+    "project_id": { "type": "string", "minLength": 1 },
+    "window_start": { "type": "string", "format": "date-time" },
+    "window_end": { "type": "string", "format": "date-time" },
+    "conversations": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/conversation" }
+    },
+    "records": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/evidence" }
+    }
+  },
+  "$defs": {
+    "conversation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["conversation_id", "has_events_before_window", "has_events_after_window"],
+      "properties": {
+        "conversation_id": { "type": "string", "minLength": 1 },
+        "has_events_before_window": { "type": "boolean" },
+        "has_events_after_window": { "type": "boolean" }
+      }
+    },
+    "evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["evidence_id", "conversation_id", "project_id", "timestamp", "actor", "sequence", "event_type", "call_id", "source_location", "content_or_reference", "content_hash", "collection_status", "duplicate_of"],
+      "properties": {
+        "evidence_id": { "type": "string", "pattern": "^ev_[a-zA-Z0-9_-]+$" },
+        "conversation_id": { "type": "string", "minLength": 1 },
+        "project_id": { "type": "string", "minLength": 1 },
+        "timestamp": { "type": "string", "format": "date-time" },
+        "actor": { "enum": ["user", "assistant", "tool", "system"] },
+        "sequence": { "type": "integer", "minimum": 0 },
+        "event_type": { "enum": ["message", "tool_call", "tool_result", "execution_error", "artifact_reference"] },
+        "call_id": { "type": ["string", "null"], "minLength": 1 },
+        "source_location": { "type": "string", "minLength": 1 },
+        "content_or_reference": { "type": "string", "minLength": 1 },
+        "content_hash": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
+        "collection_status": { "enum": ["collected", "referenced", "redacted"] },
+        "duplicate_of": { "type": ["string", "null"], "pattern": "^ev_[a-zA-Z0-9_-]+$" }
+      }
+    }
+  }
+}
