@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import secrets
 import shutil
 from contextlib import contextmanager
@@ -9,7 +8,6 @@ from pathlib import Path
 from typing import Any, Iterator
 from zoneinfo import ZoneInfo
 
-from .agent import run_codex_stage
 from .errors import SddFrlError
 from .io import (
     ensure_within,
@@ -22,7 +20,7 @@ from .io import (
 )
 from .metrics import build_metrics, build_trend
 from .report import publish_report, render_report
-from .resources import CONTRACT_REVISION, asset_path, contract_bundle_hash
+from .resources import CONTRACT_REVISION, contract_bundle_hash
 from .source import build_evidence, collect_source_packet, parse_datetime
 from .validation import (
     schema_errors,
@@ -33,7 +31,7 @@ from .validation import (
     validate_schema,
     validate_trend,
 )
-from .workspace import Workspace, load_workspace
+from .workspace import Workspace, inspect_agent_configuration, load_workspace
 
 STAGES = ("collector", "analyst", "metrics", "trend", "optimizer")
 ARCHIVE_FILES = (
@@ -48,6 +46,13 @@ ARCHIVE_FILES = (
     "proposal.json",
     "report.md",
 )
+RUNTIME_CONTRACT_ROOT = Path(".sdd-frl/contracts")
+TERMINAL_STATUSES = {
+    "COMPLETED_NO_TASKS",
+    "COMPLETED_WITH_METRICS",
+    "COMPLETED_WITH_FINDINGS",
+    "COMPLETED_WITH_PROPOSAL",
+}
 
 
 def create_run_id(project_id: str, now: datetime | None = None) -> str:
@@ -175,10 +180,7 @@ def _fail(
             "completed_at": utc_now(),
         })
     _save_run(run_file, run)
-    write_text_atomic(
-        raw_report,
-        render_report(run=run, review_date=review_date),
-    )
+    write_text_atomic(raw_report, render_report(run=run, review_date=review_date))
 
 
 @contextmanager
@@ -258,12 +260,20 @@ def _target_manifest(
     }
 
 
-def _assert_targets_unchanged(targets: list[dict[str, Any]], snapshots: dict[str, str]) -> None:
-    for target in targets:
-        if sha256(Path(target["path"]).read_bytes()) != snapshots[target["id"]]:
+def _assert_manifest_targets_unchanged(manifest: dict[str, Any]) -> None:
+    for target in manifest["targets"]:
+        path = Path(target["path"])
+        try:
+            current = sha256(path.read_bytes())
+        except OSError as exc:
             raise SddFrlError(
                 "IMPROVEMENT_TARGET_MUTATED",
-                f"Optimizer 修改了只读载体 {target['id']}。",
+                f"锁定载体不可读：{target['id']}。",
+            ) from exc
+        if f"sha256:{current}" != target["content_hash"]:
+            raise SddFrlError(
+                "IMPROVEMENT_TARGET_MUTATED",
+                f"Optimizer 阶段前后载体发生变化：{target['id']}。",
             )
 
 
@@ -357,28 +367,133 @@ def _prepare_run(
     return run, run_dir
 
 
-def _finalize(
+def _review_date(run: dict[str, Any]) -> str:
+    return parse_datetime(run["parameters"]["window_start"]).date().isoformat()
+
+
+def _load_run(workspace: Workspace, run_id: str) -> tuple[dict[str, Any], Path, Path]:
+    run_dir = ensure_within(workspace.runs_dir, workspace.runs_dir / run_id, "RUN_IDENTITY_MISMATCH")
+    run_file = run_dir / "run.json"
+    run = read_json(run_file)
+    validate_schema("run", run)
+    if run.get("run_id") != run_id or run["parameters"]["project_id"] != workspace.project_id:
+        raise SddFrlError("RUN_IDENTITY_MISMATCH", "run_id 或 project_id 与当前工作区不一致。")
+    return run, run_dir, run_file
+
+
+def _handoff(
+    run: dict[str, Any],
+    *,
+    next_action: str,
+    input_packet: dict[str, Any] | None = None,
+    output_schema: str | None = None,
+    blocker_codes: list[str] | None = None,
+    report: str | None = None,
+) -> dict[str, Any]:
+    value = {
+        "schema_version": "1.0.0",
+        "run_id": run["run_id"],
+        "status": run["status"],
+        "next_action": next_action,
+        "input_packet": input_packet,
+        "output_schema": output_schema,
+        "blocker_codes": blocker_codes or [],
+        "report": report,
+    }
+    validate_schema("handoff", value)
+    return value
+
+
+def _stage_packet(
+    workspace: Workspace,
+    run: dict[str, Any],
+    run_dir: Path,
+    stage: str,
+) -> dict[str, Any]:
+    contracts = workspace.root / RUNTIME_CONTRACT_ROOT
+    output_file = run_dir / "agent-output" / f"{stage}.json"
+    output_file.parent.mkdir(parents=True, exist_ok=True)
+    if stage == "analyst":
+        input_files = {
+            "run": run_dir / "run.json",
+            "evidence": run_dir / "evidence.json",
+            "deduplication_contract": contracts / "deduplication.md",
+            "contract_precedence": contracts / "precedence.md",
+            "issue_signatures": contracts / "issue-signatures.json",
+        }
+        prompt = contracts / "analyst.md"
+        schema = contracts / "findings.schema.json"
+        agent = "sdd_frl_analyst"
+    else:
+        manifest = read_json(run_dir / "improvement-targets.json")
+        input_files = {
+            "run": run_dir / "run.json",
+            "evidence": run_dir / "optimizer-evidence.json",
+            "findings": run_dir / "findings.json",
+            "improvement_targets": run_dir / "improvement-targets.json",
+        }
+        for index, target in enumerate(manifest["targets"]):
+            input_files[f"target_{index}_{target['id']}"] = Path(target["path"])
+        prompt = contracts / "optimizer.md"
+        schema = contracts / "proposal.schema.json"
+        agent = "sdd_frl_optimizer"
+    missing = [str(path) for path in [prompt, schema, *input_files.values()] if not path.is_file()]
+    if missing:
+        raise SddFrlError(
+            "AGENT_CONFIG_UNAVAILABLE",
+            f"原生子代理输入缺失：{', '.join(missing)}",
+        )
+    return {
+        "stage": stage,
+        "agent": agent,
+        "prompt": str(prompt),
+        "input_files": {name: str(path) for name, path in input_files.items()},
+        "output_file": str(output_file),
+    }
+
+
+def _agent_handoff(
+    workspace: Workspace,
+    run: dict[str, Any],
+    run_dir: Path,
+    stage: str,
+) -> dict[str, Any]:
+    packet = _stage_packet(workspace, run, run_dir, stage)
+    return _handoff(
+        run,
+        next_action=f"SPAWN_{stage.upper()}",
+        input_packet=packet,
+        output_schema=(
+            str(workspace.root / RUNTIME_CONTRACT_ROOT / "findings.schema.json")
+            if stage == "analyst"
+            else str(workspace.root / RUNTIME_CONTRACT_ROOT / "proposal.schema.json")
+        ),
+    )
+
+
+def _finalize_artifacts(
     workspace: Workspace,
     *,
     run: dict[str, Any],
     run_dir: Path,
-    review_date: str,
-    findings: dict[str, Any] | None = None,
-    metrics: dict[str, Any] | None = None,
-    trend: dict[str, Any] | None = None,
-    proposal: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
+    review_date = _review_date(run)
     raw_report = run_dir / "report.md"
+    artifacts: dict[str, Any] = {}
+    for name in ("findings", "metrics", "trend", "proposal"):
+        file = run_dir / f"{name}.json"
+        if file.exists():
+            artifacts[name] = read_json(file)
     if not raw_report.exists() or not run["status"].startswith("FAILED_"):
         write_text_atomic(
             raw_report,
             render_report(
                 run=run,
                 review_date=review_date,
-                findings=findings,
-                metrics=metrics,
-                trend=trend,
-                proposal=proposal,
+                findings=artifacts.get("findings"),
+                metrics=artifacts.get("metrics"),
+                trend=artifacts.get("trend"),
+                proposal=artifacts.get("proposal"),
             ),
         )
     report, published = publish_report(
@@ -387,18 +502,92 @@ def _finalize(
         review_date=review_date,
         status=run["status"],
     )
-    return {
-        "run_id": run["run_id"],
-        "status": run["status"],
-        "project_id": workspace.project_id,
-        "review_date": review_date,
-        "report": str(report),
-        "raw_report": str(raw_report),
-        "published": published,
+    del published
+    blockers = []
+    if run["status"].startswith("FAILED_"):
+        blockers = [(run.get("failure") or {}).get("code", "UNKNOWN")]
+    return _handoff(
+        run,
+        next_action="STOP",
+        blocker_codes=blockers,
+        report=str(report),
+    )
+
+
+def _compute_after_findings(
+    workspace: Workspace,
+    *,
+    run: dict[str, Any],
+    run_dir: Path,
+    run_file: Path,
+    findings: dict[str, Any],
+) -> dict[str, Any]:
+    _stage_start(run_file, run, "metrics", "COMPUTING_METRICS")
+    metrics = build_metrics(run=run, findings=findings, generated_at=utc_now())
+    validate_metrics(metrics, metrics)
+    write_json_atomic(run_dir / "metrics.json", metrics)
+    _stage_success(run_file, run, "metrics", "metrics.json")
+
+    _stage_start(run_file, run, "trend", "COMPUTING_TREND")
+    params = run["parameters"]
+    baseline = _baseline_metrics(
+        workspace,
+        current_run_id=run["run_id"],
+        project_id=workspace.project_id,
+        target_ids=params["improvement_target_ids"],
+        contract_hash=params["contract_bundle_hash"],
+        before=metrics["generated_at"],
+    )
+    trend = build_trend(
+        run=run,
+        metrics=metrics,
+        baseline=baseline,
+        generated_at=utc_now(),
+    )
+    validate_trend(trend, trend)
+    write_json_atomic(run_dir / "trend.json", trend)
+    _stage_success(run_file, run, "trend", "trend.json")
+
+    run["status"] = "CHECKING_THRESHOLD"
+    _save_run(run_file, run)
+    eligible = findings["optimizer_eligible_cluster_ids"]
+    if not eligible:
+        run["status"] = (
+            "COMPLETED_NO_TASKS"
+            if not findings["task_episodes"]
+            else "COMPLETED_WITH_METRICS"
+        )
+        run["stages"]["optimizer"]["status"] = "skipped"
+        _save_run(run_file, run)
+        return _handoff(run, next_action="FINALIZE")
+    if not params["improvement_target_ids"]:
+        run["status"] = "COMPLETED_WITH_FINDINGS"
+        run["stages"]["optimizer"]["status"] = "skipped"
+        _save_run(run_file, run)
+        return _handoff(run, next_action="FINALIZE")
+
+    evidence = read_json(run_dir / "evidence.json")
+    needed = {
+        evidence_id
+        for cluster in findings["issue_clusters"]
+        if cluster["issue_cluster_id"] in set(eligible)
+        for evidence_id in cluster["evidence_ids"]
     }
+    optimizer_evidence = {
+        **evidence,
+        "records": [
+            item for item in evidence["records"]
+            if item["evidence_id"] in needed
+        ],
+    }
+    write_json_atomic(run_dir / "optimizer-evidence.json", optimizer_evidence)
+    manifest = read_json(run_dir / "improvement-targets.json")
+    _assert_manifest_targets_unchanged(manifest)
+    _stage_start(run_file, run, "optimizer", "OPTIMIZING")
+    return _agent_handoff(workspace, run, run_dir, "optimizer")
 
 
-def run_review(
+def prepare_review(
     path: str | Path,
     *,
     review_date: str | None = None,
@@ -409,6 +598,7 @@ def run_review(
     now: datetime | None = None,
 ) -> dict[str, Any]:
     workspace = load_workspace(path)
+    inspect_agent_configuration(workspace.root)
     if project_id and project_id != workspace.project_id:
         raise SddFrlError(
             "WORKSPACE_PROJECT_MISMATCH",
@@ -461,205 +651,206 @@ def run_review(
             write_json_atomic(run_dir / "evidence.json", evidence)
             _stage_success(run_file, run, "collector", "evidence.json")
         except Exception as error:
+            failed_status = (
+                "FAILED_EVIDENCE_VALIDATION"
+                if run["status"] == "VALIDATING_EVIDENCE"
+                else "FAILED_COLLECTION"
+            )
             _fail(
-                run_file, raw_report, run,
-                status="FAILED_COLLECTION",
+                run_file,
+                raw_report,
+                run,
+                status=failed_status,
                 stage="collector",
                 error=error,
                 review_date=selected_date,
             )
-            return _finalize(workspace, run=run, run_dir=run_dir, review_date=selected_date)
+            return _finalize_artifacts(workspace, run=run, run_dir=run_dir)
 
-        try:
+        if not evidence["records"]:
+            findings = _empty_findings(run)
+            write_json_atomic(run_dir / "findings.json", findings)
             _stage_start(run_file, run, "analyst", "ANALYZING")
-            findings_file = run_dir / "findings.json"
-            if evidence["records"]:
-                models = workspace.config["models"]
-                findings = run_codex_stage(
-                    stage="analyst",
-                    model=models["analyst"]["model"],
-                    reasoning_effort=models["analyst"]["reasoning_effort"],
-                    prompt_name="analyst.md",
-                    schema_name="findings.schema.json",
-                    input_files={
-                        "run": run_file,
-                        "evidence": run_dir / "evidence.json",
-                        "deduplication_contract": asset_path("contracts", "deduplication.md"),
-                        "contract_precedence": asset_path("contracts", "precedence.md"),
-                        "issue_signatures": asset_path("contracts", "issue-signatures.json"),
-                    },
-                    output_file=findings_file,
-                    log_file=run_dir / "logs" / f"analyst.attempt-{run['attempt']}.log",
-                    workspace=workspace.root,
-                )
-            else:
-                findings = _empty_findings(run)
-                write_json_atomic(findings_file, findings)
-            run["status"] = "VALIDATING_FINDINGS"
-            _save_run(run_file, run)
-            validate_findings(findings, run=run, evidence=evidence)
             _stage_success(run_file, run, "analyst", "findings.json")
-        except Exception as error:
-            _fail(
-                run_file, raw_report, run,
-                status="FAILED_FINDINGS_VALIDATION"
-                if run["status"] == "VALIDATING_FINDINGS"
-                else "FAILED_ANALYSIS",
-                stage="analyst",
-                error=error,
-                review_date=selected_date,
-            )
-            return _finalize(workspace, run=run, run_dir=run_dir, review_date=selected_date)
-
-        try:
-            _stage_start(run_file, run, "metrics", "COMPUTING_METRICS")
-            metrics = build_metrics(run=run, findings=findings, generated_at=utc_now())
-            validate_metrics(metrics, metrics)
-            write_json_atomic(run_dir / "metrics.json", metrics)
-            _stage_success(run_file, run, "metrics", "metrics.json")
-        except Exception as error:
-            _fail(
-                run_file, raw_report, run,
-                status="FAILED_METRICS",
-                stage="metrics",
-                error=error,
-                review_date=selected_date,
-            )
-            return _finalize(
-                workspace,
-                run=run,
-                run_dir=run_dir,
-                review_date=selected_date,
-                findings=findings,
-            )
-
-        try:
-            _stage_start(run_file, run, "trend", "COMPUTING_TREND")
-            baseline = _baseline_metrics(
-                workspace,
-                current_run_id=run["run_id"],
-                project_id=workspace.project_id,
-                target_ids=parameters["improvement_target_ids"],
-                contract_hash=contract_hash,
-                before=metrics["generated_at"],
-            )
-            trend = build_trend(
-                run=run,
-                metrics=metrics,
-                baseline=baseline,
-                generated_at=utc_now(),
-            )
-            validate_trend(trend, trend)
-            write_json_atomic(run_dir / "trend.json", trend)
-            _stage_success(run_file, run, "trend", "trend.json")
-        except Exception as error:
-            _fail(
-                run_file, raw_report, run,
-                status="FAILED_TREND",
-                stage="trend",
-                error=error,
-                review_date=selected_date,
-            )
-            return _finalize(
-                workspace,
-                run=run,
-                run_dir=run_dir,
-                review_date=selected_date,
-                findings=findings,
-                metrics=metrics,
-            )
-
-        run["status"] = "CHECKING_THRESHOLD"
-        _save_run(run_file, run)
-        proposal = None
-        eligible = findings["optimizer_eligible_cluster_ids"]
-        if not eligible:
-            run["status"] = (
-                "COMPLETED_NO_TASKS"
-                if not findings["task_episodes"]
-                else "COMPLETED_WITH_METRICS"
-            )
-            run["stages"]["optimizer"]["status"] = "skipped"
-            _save_run(run_file, run)
-        elif not targets:
-            run["status"] = "COMPLETED_WITH_FINDINGS"
-            run["stages"]["optimizer"]["status"] = "skipped"
-            _save_run(run_file, run)
-        else:
             try:
-                _stage_start(run_file, run, "optimizer", "OPTIMIZING")
-                needed = {
-                    evidence_id
-                    for cluster in findings["issue_clusters"]
-                    if cluster["issue_cluster_id"] in set(eligible)
-                    for evidence_id in cluster["evidence_ids"]
-                }
-                optimizer_evidence = {
-                    **evidence,
-                    "records": [
-                        item for item in evidence["records"]
-                        if item["evidence_id"] in needed
-                    ],
-                }
-                write_json_atomic(run_dir / "optimizer-evidence.json", optimizer_evidence)
-                inputs = {
-                    "run": run_file,
-                    "evidence": run_dir / "optimizer-evidence.json",
-                    "findings": run_dir / "findings.json",
-                    "improvement_targets": run_dir / "improvement-targets.json",
-                }
-                for index, target in enumerate(targets):
-                    inputs[f"target_{index}_{target['id']}"] = Path(target["path"])
-                models = workspace.config["models"]
-                proposal = run_codex_stage(
-                    stage="optimizer",
-                    model=models["optimizer"]["model"],
-                    reasoning_effort=models["optimizer"]["reasoning_effort"],
-                    prompt_name="optimizer.md",
-                    schema_name="proposal.schema.json",
-                    input_files=inputs,
-                    output_file=run_dir / "proposal.json",
-                    log_file=run_dir / "logs" / f"optimizer.attempt-{run['attempt']}.log",
-                    workspace=workspace.root,
-                )
-                _assert_targets_unchanged(targets, snapshots)
-                run["status"] = "VALIDATING_PROPOSAL"
-                _save_run(run_file, run)
-                validate_proposal(proposal, run=run, findings=findings)
-                _stage_success(run_file, run, "optimizer", "proposal.json")
-                run["status"] = (
-                    "COMPLETED_WITH_PROPOSAL"
-                    if proposal["proposals"]
-                    else "COMPLETED_WITH_FINDINGS"
-                )
-                _save_run(run_file, run)
-            except Exception as error:
-                _fail(
-                    run_file, raw_report, run,
-                    status="FAILED_PROPOSAL_VALIDATION"
-                    if run["status"] == "VALIDATING_PROPOSAL"
-                    else "FAILED_OPTIMIZATION",
-                    stage="optimizer",
-                    error=error,
-                    review_date=selected_date,
-                )
-                return _finalize(
+                return _compute_after_findings(
                     workspace,
                     run=run,
                     run_dir=run_dir,
-                    review_date=selected_date,
+                    run_file=run_file,
                     findings=findings,
-                    metrics=metrics,
-                    trend=trend,
                 )
+            except Exception as error:
+                stage = (
+                    "trend"
+                    if run["status"] == "COMPUTING_TREND"
+                    else "metrics"
+                )
+                status = "FAILED_TREND" if stage == "trend" else "FAILED_METRICS"
+                _fail(
+                    run_file,
+                    raw_report,
+                    run,
+                    status=status,
+                    stage=stage,
+                    error=error,
+                    review_date=selected_date,
+                )
+                return _finalize_artifacts(workspace, run=run, run_dir=run_dir)
 
-        return _finalize(
-            workspace,
-            run=run,
-            run_dir=run_dir,
-            review_date=selected_date,
-            findings=findings,
-            metrics=metrics,
-            trend=trend,
-            proposal=proposal,
+        _stage_start(run_file, run, "analyst", "ANALYZING")
+        return _agent_handoff(workspace, run, run_dir, "analyst")
+
+
+def _candidate_value(run_dir: Path, stage: str, input_file: str | Path) -> dict[str, Any]:
+    expected = (run_dir / "agent-output" / f"{stage}.json").resolve()
+    actual = ensure_within(run_dir, Path(input_file), "WORKSPACE_MISMATCH")
+    if actual != expected:
+        raise SddFrlError(
+            "WORKSPACE_MISMATCH",
+            f"{stage} 输出必须写入 handoff 指定路径：{expected}",
         )
+    value = read_json(actual)
+    if not isinstance(value, dict):
+        raise SddFrlError("AGENT_OUTPUT_INVALID", f"{stage} 输出必须是 JSON 对象。")
+    return value
+
+
+def continue_review(
+    path: str | Path,
+    *,
+    run_id: str,
+    stage: str,
+    input_file: str | Path,
+) -> dict[str, Any]:
+    workspace = load_workspace(path)
+    if stage not in {"analyst", "optimizer"}:
+        raise SddFrlError("STAGE_ORDER_INVALID", f"不支持的继续阶段：{stage}。")
+    expected_status = "ANALYZING" if stage == "analyst" else "OPTIMIZING"
+    with _project_lock(workspace, run_id):
+        run, run_dir, run_file = _load_run(workspace, run_id)
+        if run["status"] != expected_status or run["stages"][stage]["status"] != "running":
+            raise SddFrlError(
+                "STAGE_ORDER_INVALID",
+                f"{stage} 不能在状态 {run['status']} 下继续。",
+            )
+        raw_report = run_dir / "report.md"
+        review_date = _review_date(run)
+        try:
+            value = _candidate_value(run_dir, stage, input_file)
+            if (
+                value.get("run_id") != run_id
+                or value.get("project_id") != workspace.project_id
+            ):
+                raise SddFrlError(
+                    "RUN_IDENTITY_MISMATCH",
+                    f"{stage} 输出的 run_id 或 project_id 不一致。",
+                )
+            if stage == "analyst":
+                run["status"] = "VALIDATING_FINDINGS"
+                _save_run(run_file, run)
+                evidence = read_json(run_dir / "evidence.json")
+                validate_findings(value, run=run, evidence=evidence)
+                write_json_atomic(run_dir / "findings.json", value)
+                _stage_success(run_file, run, "analyst", "findings.json")
+            else:
+                run["status"] = "VALIDATING_PROPOSAL"
+                _save_run(run_file, run)
+                findings = read_json(run_dir / "findings.json")
+                manifest = read_json(run_dir / "improvement-targets.json")
+                _assert_manifest_targets_unchanged(manifest)
+                validate_proposal(value, run=run, findings=findings)
+                write_json_atomic(run_dir / "proposal.json", value)
+                _stage_success(run_file, run, "optimizer", "proposal.json")
+                run["status"] = (
+                    "COMPLETED_WITH_PROPOSAL"
+                    if value["proposals"]
+                    else "COMPLETED_WITH_FINDINGS"
+                )
+                _save_run(run_file, run)
+        except Exception as error:
+            if isinstance(error, SddFrlError) and error.code == "RUN_IDENTITY_MISMATCH":
+                failure = error
+            else:
+                code, message = _failure_details(error)
+                failure = SddFrlError(
+                    "AGENT_OUTPUT_INVALID",
+                    f"{stage} 输出校验失败（{code}）：{message}",
+                )
+            status = (
+                "FAILED_FINDINGS_VALIDATION"
+                if stage == "analyst"
+                else "FAILED_PROPOSAL_VALIDATION"
+            )
+            _fail(
+                run_file,
+                raw_report,
+                run,
+                status=status,
+                stage=stage,
+                error=failure,
+                review_date=review_date,
+            )
+            return _finalize_artifacts(workspace, run=run, run_dir=run_dir)
+
+        if stage == "optimizer":
+            return _handoff(run, next_action="FINALIZE")
+        try:
+            return _compute_after_findings(
+                workspace,
+                run=run,
+                run_dir=run_dir,
+                run_file=run_file,
+                findings=value,
+            )
+        except Exception as error:
+            if run["status"] in {"COMPUTING_TREND", "FAILED_TREND"}:
+                failed_stage, failed_status = "trend", "FAILED_TREND"
+            elif run["status"] == "OPTIMIZING":
+                failed_stage, failed_status = "optimizer", "FAILED_OPTIMIZATION"
+            else:
+                failed_stage, failed_status = "metrics", "FAILED_METRICS"
+            _fail(
+                run_file,
+                raw_report,
+                run,
+                status=failed_status,
+                stage=failed_stage,
+                error=error,
+                review_date=review_date,
+            )
+            return _finalize_artifacts(workspace, run=run, run_dir=run_dir)
+
+
+def finalize_review(path: str | Path, *, run_id: str) -> dict[str, Any]:
+    workspace = load_workspace(path)
+    run, run_dir, _ = _load_run(workspace, run_id)
+    if run["status"] not in TERMINAL_STATUSES and not run["status"].startswith("FAILED_"):
+        raise SddFrlError(
+            "STAGE_ORDER_INVALID",
+            f"运行 {run_id} 尚未到达可收尾状态：{run['status']}。",
+        )
+    with _project_lock(workspace, run_id):
+        return _finalize_artifacts(workspace, run=run, run_dir=run_dir)
+
+
+def run_review(
+    path: str | Path,
+    *,
+    review_date: str | None = None,
+    window_start: str | None = None,
+    window_end: str | None = None,
+    project_id: str | None = None,
+    run_id: str | None = None,
+    now: datetime | None = None,
+) -> dict[str, Any]:
+    """Compatibility entry point: prepare only; never launches a nested Codex process."""
+    return prepare_review(
+        path,
+        review_date=review_date,
+        window_start=window_start,
+        window_end=window_end,
+        project_id=project_id,
+        run_id=run_id,
+        now=now,
+    )

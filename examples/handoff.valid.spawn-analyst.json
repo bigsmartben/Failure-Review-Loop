@@ -1,0 +1,19 @@
+{
+  "schema_version": "1.0.0",
+  "run_id": "20260727T010000Z_my-project_a1b2c3",
+  "status": "ANALYZING",
+  "next_action": "SPAWN_ANALYST",
+  "input_packet": {
+    "stage": "analyst",
+    "agent": "sdd_frl_analyst",
+    "prompt": "C:/work/my-project/.sdd-frl/contracts/analyst.md",
+    "input_files": {
+      "run": "C:/work/my-project/.sdd-frl/runs/20260727T010000Z_my-project_a1b2c3/run.json",
+      "evidence": "C:/work/my-project/.sdd-frl/runs/20260727T010000Z_my-project_a1b2c3/evidence.json"
+    },
+    "output_file": "C:/work/my-project/.sdd-frl/runs/20260727T010000Z_my-project_a1b2c3/agent-output/analyst.json"
+  },
+  "output_schema": "C:/work/my-project/.sdd-frl/contracts/findings.schema.json",
+  "blocker_codes": [],
+  "report": null
+}

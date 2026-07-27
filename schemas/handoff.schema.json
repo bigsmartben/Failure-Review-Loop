@@ -1,0 +1,92 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://failure-review-loop.local/schemas/handoff.schema.json",
+  "title": "Codex App Native Subagent Handoff",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "run_id",
+    "status",
+    "next_action",
+    "input_packet",
+    "output_schema",
+    "blocker_codes",
+    "report"
+  ],
+  "properties": {
+    "schema_version": { "type": "string", "const": "1.0.0" },
+    "run_id": { "type": "string", "minLength": 1 },
+    "status": { "type": "string", "minLength": 1 },
+    "next_action": {
+      "enum": ["SPAWN_ANALYST", "SPAWN_OPTIMIZER", "FINALIZE", "STOP"]
+    },
+    "input_packet": {
+      "oneOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "stage",
+            "agent",
+            "prompt",
+            "input_files",
+            "output_file"
+          ],
+          "properties": {
+            "stage": { "enum": ["analyst", "optimizer"] },
+            "agent": { "enum": ["sdd_frl_analyst", "sdd_frl_optimizer"] },
+            "prompt": { "type": "string", "minLength": 1 },
+            "input_files": {
+              "type": "object",
+              "minProperties": 1,
+              "additionalProperties": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "output_file": { "type": "string", "minLength": 1 }
+          }
+        }
+      ]
+    },
+    "output_schema": { "type": ["string", "null"] },
+    "blocker_codes": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "report": { "type": ["string", "null"] }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "next_action": {
+            "enum": ["SPAWN_ANALYST", "SPAWN_OPTIMIZER"]
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "input_packet": { "type": "object" },
+          "output_schema": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "next_action": { "enum": ["FINALIZE", "STOP"] }
+        }
+      },
+      "then": {
+        "properties": {
+          "input_packet": { "type": "null" },
+          "output_schema": { "type": "null" }
+        }
+      }
+    }
+  ]
+}

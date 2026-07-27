@@ -11,7 +11,9 @@
 |---|---|
 | 复盘对象 | 定时任务绑定的当前项目 |
 | 执行时间 | 每天 09:00，使用项目配置的时区 |
-| 执行命令 | `sdd-frl run .` |
+| 运行宿主 | Codex App Scheduled Task（定时任务） |
+| CLI 状态机 | `prepare → continue → finalize` |
+| 子代理 | `sdd_frl_analyst`、`sdd_frl_optimizer` |
 | 时间范围 | 最近一个完整自然日 |
 | 最终报告 | `docs/failure-review/YYYY-MM-DD.md` |
 | 运行记录 | `.sdd-frl/runs/<run_id>/` |
@@ -29,16 +31,22 @@
 ├─ .sdd-frl/
 │  ├─ config.json
 │  ├─ automation/task-prompt.md
+│  ├─ contracts/
 │  ├─ runs/
 │  └─ locks/
+├─ .codex/agents/
+│  ├─ sdd-frl-analyst.toml
+│  └─ sdd-frl-optimizer.toml
 └─ docs/failure-review/
 ```
 
 | 路径 | 维护用途 |
 |---|---|
 | `failure-review.project.json` | 确认项目身份 |
-| `.sdd-frl/config.json` | 确认项目、时区、模型和输出位置 |
+| `.sdd-frl/config.json` | 确认项目、时区和输出位置；不保存模型配置 |
 | `.sdd-frl/automation/task-prompt.md` | 创建定时任务的权威提示词 |
+| `.codex/agents/*.toml` | 模型、推理强度、只读沙箱和角色职责 |
+| `.sdd-frl/contracts/` | 原生子代理读取的 Prompt、Schema 与去重契约 |
 | `.sdd-frl/runs/` | 查看证据、指标和失败日志 |
 | `docs/failure-review/` | 查看给人阅读的最终报告 |
 
@@ -63,13 +71,17 @@ sdd-frl probe .
 
 ## 手工复盘
 
-通常不需要手工运行。排查问题时可以指定日期：
+通常不需要手工运行。排查状态机时可以指定日期：
 
 ```powershell
-sdd-frl run . --date 2026-07-26
+sdd-frl prepare . --date 2026-07-26
 ```
 
-成功时返回 `run_id`、状态和报告绝对路径。
+命令返回 handoff JSON。必须严格执行其 `next_action`；到达 `FINALIZE` 后运行：
+
+```powershell
+sdd-frl finalize . --run-id <run_id>
+```
 
 ## 失败处理
 
@@ -78,6 +90,11 @@ sdd-frl run . --date 2026-07-26
 | `WORKSPACE_NOT_INITIALIZED` | 在目标项目执行 `sdd-frl init .` |
 | `TIMEZONE_REQUIRED` | 执行 `sdd-frl init . --timezone Asia/Shanghai` |
 | `WORKSPACE_PROJECT_MISMATCH` | 检查 marker 与 `.sdd-frl/config.json` 的项目 ID |
+| `AGENT_CONFIG_UNAVAILABLE` | 重新执行 `sdd-frl init .` 并在可信项目中打开新对话 |
+| `AGENTS_DISABLED` | 移除项目配置中禁用原生子代理的设置 |
+| `STAGE_ORDER_INVALID` | 按上一条 handoff 的 `next_action` 继续，不跳阶段 |
+| `RUN_IDENTITY_MISMATCH` | 丢弃错误 Agent 输出，不跨运行复用 |
+| `AGENT_OUTPUT_INVALID` | 查看 Agent 输出并按对应 Schema 修复 |
 | `OVERLAPPING_RUN` | 等待当前运行结束，不要并行启动第二次 |
 | `SETUP_BLOCKED` | 按 Codex 返回的具体原因处理后，重新执行 quickstart 第三步 |
 | `FAILED_*` | 查看 `.sdd-frl/runs/<run_id>/report.md` |
@@ -88,6 +105,8 @@ sdd-frl run . --date 2026-07-26
 
 - Codex 会话目录只读。
 - 配置、锁、运行记录和报告只能写入当前项目。
+- Analyst 与 Optimizer 使用项目级只读 Agent TOML；Python 不再启动嵌套
+  `codex exec`。
 - Optimizer 只生成提案，不自动修改、提交、发布或部署文件。
 - 已有 `README.md` 或 `quickstart.md` 不会被初始化器覆盖。
 
