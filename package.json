@@ -9,6 +9,7 @@
   },
   "scripts": {
     "init:product": "npm install --no-audit --no-fund && node src/init-product.js",
+    "configure:project": "node src/configure-project.js",
     "test": "node --test",
     "validate:examples": "node src/cli.js validate-examples",
     "probe": "node src/cli.js probe"

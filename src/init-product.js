@@ -6,6 +6,9 @@ import { fileURLToPath } from "node:url";
 
 const rootDir = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 
+export const INIT_NEXT_STEP =
+  "初始化完成。请先运行 npm run configure:project 注册被复盘项目，再创建已安排任务。";
+
 export function buildAnalysisOnlyConfig(example) {
   return {
     ...example,
@@ -84,7 +87,7 @@ async function main() {
     config.configFile
   ]);
 
-  process.stdout.write("\n初始化完成，可以创建已安排任务。\n");
+  process.stdout.write(`\n${INIT_NEXT_STEP}\n`);
 }
 
 const isMain = process.argv[1] &&

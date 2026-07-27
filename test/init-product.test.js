@@ -5,7 +5,8 @@ import os from "node:os";
 import path from "node:path";
 import {
   buildAnalysisOnlyConfig,
-  ensureProductConfig
+  ensureProductConfig,
+  INIT_NEXT_STEP
 } from "../src/init-product.js";
 
 function exampleConfig() {
@@ -39,6 +40,11 @@ test("analysis-only initialization removes placeholder targets", () => {
   assert.deepEqual(result.project_bindings[0].improvement_target_ids, []);
   assert.deepEqual(result.improvement_targets, []);
   assert.equal(result.models.analyst.model, "analyst-model");
+});
+
+test("initialization requires project registration before scheduling", () => {
+  assert.match(INIT_NEXT_STEP, /npm run configure:project/);
+  assert.match(INIT_NEXT_STEP, /注册被复盘项目/);
 });
 
 test("initialization creates a safe config when none exists", async () => {
