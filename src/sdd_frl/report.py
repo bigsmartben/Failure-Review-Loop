@@ -4,6 +4,7 @@ import re
 from pathlib import Path
 from typing import Any
 
+from .findings_report import render_findings_section
 from .io import utc_now, write_text_atomic
 from .workspace import Workspace
 
@@ -42,6 +43,7 @@ def render_report(
     source: dict[str, Any] | None = None,
     metrics: dict[str, Any] | None = None,
     findings: dict[str, Any] | None = None,
+    evidence: dict[str, Any] | None = None,
     trend: dict[str, Any] | None = None,
     proposal: dict[str, Any] | None = None,
 ) -> str:
@@ -154,15 +156,7 @@ def render_report(
                 "",
             ])
     if findings:
-        lines.extend(["## 高频问题与根因", ""])
-        if not findings["issue_clusters"]:
-            lines.append("没有识别到问题实例。")
-        for cluster in findings["issue_clusters"]:
-            lines.append(
-                f"- `{cluster['issue_cluster_id']}` "
-                f"{PATTERN_LABELS[cluster['pattern']]} / "
-                f"`{cluster['issue_signature']}`：{cluster['instance_count']} 个独立任务"
-            )
+        lines.extend(render_findings_section(findings, evidence).splitlines())
         lines.append("")
     if proposal:
         lines.extend(["## 改进提案", ""])

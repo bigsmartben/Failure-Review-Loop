@@ -160,11 +160,49 @@ def validate_findings(
     if covered_user_ids | excluded != user_ids:
         raise SddFrlError("FINDINGS_USER_COVERAGE", "每条用户消息必须被任务覆盖或显式排除。")
 
+    tasks = {item["task_episode_id"]: item for item in findings["task_episodes"]}
     instances = {item["problem_instance_id"]: item for item in findings["problem_instances"]}
+    for instance in findings["problem_instances"]:
+        task = tasks.get(instance["task_episode_id"])
+        if task is None:
+            raise SddFrlError(
+                "FINDINGS_TASK_REFERENCE_UNKNOWN",
+                f"问题实例 {instance['problem_instance_id']} 引用了不存在的任务。",
+            )
+        if not set(instance["evidence_ids"]) <= valid_ids:
+            raise SddFrlError(
+                "FINDINGS_EVIDENCE_UNKNOWN",
+                f"问题实例 {instance['problem_instance_id']} 引用了不存在的 evidence_id。",
+            )
     eligible = set(findings["optimizer_eligible_cluster_ids"])
     for cluster in findings["issue_clusters"]:
+        missing_ids = [
+            item for item in cluster["problem_instance_ids"] if item not in instances
+        ]
+        if missing_ids:
+            raise SddFrlError(
+                "FINDINGS_CLUSTER_REFERENCE_UNKNOWN",
+                f"问题簇 {cluster['issue_cluster_id']} 引用了不存在的问题实例。",
+            )
         cluster_instances = [instances[item] for item in cluster["problem_instance_ids"]]
         task_ids = {item["task_episode_id"] for item in cluster_instances}
+        evidence_ids = {
+            evidence_id
+            for item in cluster_instances
+            for evidence_id in item["evidence_ids"]
+        }
+        if (
+            set(cluster["task_episode_ids"]) != task_ids
+            or cluster["instance_count"] != len(cluster_instances)
+            or cluster["severity_total"] != sum(
+                item["severity"] for item in cluster_instances
+            )
+            or set(cluster["evidence_ids"]) != evidence_ids
+        ):
+            raise SddFrlError(
+                "FINDINGS_CLUSTER_MISMATCH",
+                f"问题簇 {cluster['issue_cluster_id']} 的计数或引用与问题实例不一致。",
+            )
         is_eligible = (
             cluster["signature_status"] == "registered"
             and len(task_ids) >= 3
