@@ -16,6 +16,7 @@ CONTRACT_FILES = (
     ("schemas", "metrics.schema.json"),
     ("schemas", "trend.schema.json"),
     ("schemas", "proposal.schema.json"),
+    ("schemas", "handoff.schema.json"),
     ("prompts", "collector.md"),
     ("prompts", "analyst.md"),
     ("prompts", "optimizer.md"),

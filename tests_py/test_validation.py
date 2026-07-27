@@ -36,3 +36,26 @@ def test_packaged_schemas_are_available() -> None:
         "failure": None,
     }
     assert schema_errors("run", json.loads(json.dumps(valid))) == []
+
+
+def test_handoff_schema_requires_structured_agent_packet() -> None:
+    valid = {
+        "schema_version": "1.0.0",
+        "run_id": "run-1",
+        "status": "ANALYZING",
+        "next_action": "SPAWN_ANALYST",
+        "input_packet": {
+            "stage": "analyst",
+            "agent": "sdd_frl_analyst",
+            "prompt": "C:/project/.sdd-frl/contracts/analyst.md",
+            "input_files": {"run": "C:/project/.sdd-frl/runs/run-1/run.json"},
+            "output_file": "C:/project/.sdd-frl/runs/run-1/agent-output/analyst.json",
+        },
+        "output_schema": "C:/project/.sdd-frl/contracts/findings.schema.json",
+        "blocker_codes": [],
+        "report": None,
+    }
+    invalid = {**valid, "input_packet": None}
+
+    assert schema_errors("handoff", valid) == []
+    assert schema_errors("handoff", invalid)

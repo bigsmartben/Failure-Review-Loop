@@ -6,14 +6,13 @@ import sys
 from pathlib import Path
 
 from . import __version__
-from .agent import probe_codex
 from .errors import SddFrlError
-from .pipeline import run_review
+from .pipeline import continue_review, finalize_review, prepare_review, run_review
 from .resources import asset_path
 from .validation import load_and_validate_file, schema_errors
 from .workspace import init_workspace, load_workspace
 
-KINDS = ("run", "evidence", "findings", "metrics", "trend", "proposal")
+KINDS = ("run", "evidence", "findings", "metrics", "trend", "proposal", "handoff")
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -29,13 +28,27 @@ def _parser() -> argparse.ArgumentParser:
     init.add_argument("--project-id")
     init.add_argument("--timezone")
 
-    run = commands.add_parser("run", help="复盘目标工作区")
-    run.add_argument("path", nargs="?", default=".")
-    run.add_argument("--date", dest="review_date")
-    run.add_argument("--window-start")
-    run.add_argument("--window-end")
-    run.add_argument("--project-id")
-    run.add_argument("--run-id")
+    for name, help_text in (
+        ("prepare", "采集并返回 Codex App 原生子代理 handoff"),
+        ("run", "兼容别名：等同 prepare，不启动嵌套 codex exec"),
+    ):
+        run = commands.add_parser(name, help=help_text)
+        run.add_argument("path", nargs="?", default=".")
+        run.add_argument("--date", dest="review_date")
+        run.add_argument("--window-start")
+        run.add_argument("--window-end")
+        run.add_argument("--project-id")
+        run.add_argument("--run-id")
+
+    resume = commands.add_parser("continue", help="校验原生子代理输出并推进状态机")
+    resume.add_argument("path", nargs="?", default=".")
+    resume.add_argument("--run-id", required=True)
+    resume.add_argument("--stage", choices=("analyst", "optimizer"), required=True)
+    resume.add_argument("--input", dest="input_file", required=True)
+
+    finalize = commands.add_parser("finalize", help="生成并发布最终复盘报告")
+    finalize.add_argument("path", nargs="?", default=".")
+    finalize.add_argument("--run-id", required=True)
 
     probe = commands.add_parser("probe", help="检查工作区与 Codex CLI 能力")
     probe.add_argument("path", nargs="?", default=".")
@@ -84,8 +97,9 @@ def main() -> int:
                 timezone_name=args.timezone,
             ))
             return 0
-        if args.command == "run":
-            result = run_review(
+        if args.command in {"prepare", "run"}:
+            runner = prepare_review if args.command == "prepare" else run_review
+            result = runner(
                 args.path,
                 review_date=args.review_date,
                 window_start=args.window_start,
@@ -95,14 +109,32 @@ def main() -> int:
             )
             _print(result)
             return 1 if result["status"].startswith("FAILED_") else 0
+        if args.command == "continue":
+            result = continue_review(
+                args.path,
+                run_id=args.run_id,
+                stage=args.stage,
+                input_file=args.input_file,
+            )
+            _print(result)
+            return 1 if result["status"].startswith("FAILED_") else 0
+        if args.command == "finalize":
+            result = finalize_review(args.path, run_id=args.run_id)
+            _print(result)
+            return 1 if result["status"].startswith("FAILED_") else 0
         if args.command == "probe":
             workspace = load_workspace(args.path)
-            result = probe_codex()
-            result.update({
+            from .workspace import inspect_agent_configuration
+
+            agents = inspect_agent_configuration(workspace.root)
+            result = {
+                "ready": True,
+                "runtime_host": "Codex App scheduled task",
                 "workspace": str(workspace.root),
                 "project_id": workspace.project_id,
                 "timezone": workspace.timezone,
-            })
+                "agents": agents,
+            }
             _print(result)
             return 0
         if args.command == "validate":

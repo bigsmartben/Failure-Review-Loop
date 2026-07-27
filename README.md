@@ -1,158 +1,126 @@
-# Failure Review Loop
+# Failure Review Loop 维护说明
 
-按项目和时间窗口复盘 Codex 对话，衡量执行效能（efficiency）与用户目标达成率（attainment rate），并从至少三个独立任务重复出现的具体问题中生成改进提案。
+本文面向维护者（maintainer）：负责安装、检查和排查 Failure Review Loop 的人。
 
-## 推荐入口：sdd-frl
-
-`sdd-frl` 是原生 Python CLI，通过 uv 的隔离工具环境安装；运行时不依赖 Node/npm。
-
-```powershell
-uv tool install "sdd-frl @ git+ssh://git@github.com/bigsmartben/Failure-Review-Loop.git@v0.2.2"
-sdd-frl init .
-sdd-frl run .
-```
-
-每个项目独立初始化。中间产物写入 `.sdd-frl/runs/<run_id>/`，最终文档按复盘日期写入
-`docs/failure-review/YYYY-MM-DD.md`。同日重跑保留原始运行记录，并更新同一份最终文档。
-
-完整安装、目录和失败语义见 [docs/uv-cli.md](docs/uv-cli.md)，定时任务设置见
+如果你只是第一次设置，请不要读这份维护说明，直接打开
 [quickstart.md](quickstart.md)。
 
-本项目采用契约优先（Contract-first）：领域契约先定义业务语义，Schema 定义结构，
-Validator 执行跨产物规则，Prompt 和实现只能服从契约。权威顺序见
-`docs/contracts/precedence.md`。
+## 运行契约
+
+| 项目 | 约定 |
+|---|---|
+| 复盘对象 | 定时任务绑定的当前项目 |
+| 执行时间 | 每天 09:00，使用项目配置的时区 |
+| 运行宿主 | Codex App Scheduled Task（定时任务） |
+| CLI 状态机 | `prepare → continue → finalize` |
+| 子代理 | `sdd_frl_analyst`、`sdd_frl_optimizer` |
+| 时间范围 | 最近一个完整自然日 |
+| 最终报告 | `docs/failure-review/YYYY-MM-DD.md` |
+| 运行记录 | `.sdd-frl/runs/<run_id>/` |
+
+例如，时区为 `Asia/Shanghai`，任务在 2026-07-27 09:00 执行时，复盘范围是
+2026-07-26 00:00 至 2026-07-27 00:00。
+
+## 初始化后的目录
 
 ```text
-Codex sessions
-     │ 项目绑定 + 时间窗口
-     ▼
-source-records.json
-     ▼
-Collector ─校验─▶ evidence.json
-                       ▼
-Analyst ────────▶ findings.json
-                       ▼
-             metrics.json + trend.json
-                       │
-        同一具体问题跨 ≥ 3 个任务？
-              否 ─────┴───── 是
-              ▼              ▼
-          指标报告      配置了项目载体？
-                          否 ─┴─ 是
-                          ▼      ▼
-                      问题报告  Optimizer
-                                  ▼
-                            proposal.json
+目标项目/
+├─ README.md
+├─ quickstart.md
+├─ failure-review.project.json
+├─ .sdd-frl/
+│  ├─ config.json
+│  ├─ automation/task-prompt.md
+│  ├─ contracts/
+│  ├─ runs/
+│  └─ locks/
+├─ .codex/agents/
+│  ├─ sdd-frl-analyst.toml
+│  └─ sdd-frl-optimizer.toml
+└─ docs/failure-review/
 ```
 
-## 衡量什么
-
-| 维度 | 指标 |
+| 路径 | 维护用途 |
 |---|---|
-| 目标结果 | 已达成、未达成、未知、达成率、结果覆盖率 |
-| 沟通效能 | 总轮次、澄清次数、重复澄清次数 |
-| 执行效能 | 执行尝试次数、返工次数 |
-| 高频模式 | 重复澄清、重复执行、最终未达预期 |
-| 改善趋势 | 与同项目、同目标集合最近七次有效运行比较 |
+| `failure-review.project.json` | 确认项目身份 |
+| `.sdd-frl/config.json` | 确认项目、时区和输出位置；不保存模型配置 |
+| `.sdd-frl/automation/task-prompt.md` | 创建定时任务的权威提示词 |
+| `.codex/agents/*.toml` | 模型、推理强度、只读沙箱和角色职责 |
+| `.sdd-frl/contracts/` | 原生子代理读取的 Prompt、Schema 与去重契约 |
+| `.sdd-frl/runs/` | 查看证据、指标和失败日志 |
+| `docs/failure-review/` | 查看给人阅读的最终报告 |
 
-`unknown` 不会冒充成功或失败。窗口截断的任务不进入效能分母。趋势只表示观察差异，不声明因果关系。
+## 验收
 
-每条用户消息必须被任务覆盖或显式排除。澄清、执行和返工先记录 evidence-linked
-interaction event（证据关联交互事件），计数再由 Validator 推导。条件验收使用结构化
-acceptance criteria（验收条件），不能只靠自由文本声称成功。
-
-## 兼容保留的 Node 开发入口
-
-下列 Node 命令仅用于现有实现的回归兼容；新项目使用上面的 `sdd-frl` 工作区入口。
-
-- Node.js 20 或更高版本
-- Codex CLI；本机验证版本为 `0.145.0`
-- 已登录的 Codex 账户
+初始化后执行：
 
 ```powershell
-npm install
+sdd-frl probe .
+```
+
+返回结果中的 `workspace`、`project_id` 和 `timezone` 必须与目标项目一致。
+
+创建定时任务后，还要确认：
+
+| 检查项 | 正确结果 |
+|---|---|
+| 任务名称 | `sdd-frl · <project_id>` |
+| 工作区 | 目标项目的绝对路径 |
+| 频率 | 每天 09:00 |
+| 状态 | 已启用 |
+
+## 手工复盘
+
+通常不需要手工运行。排查状态机时可以指定日期：
+
+```powershell
+sdd-frl prepare . --date 2026-07-26
+```
+
+命令返回 handoff JSON。必须严格执行其 `next_action`；到达 `FINALIZE` 后运行：
+
+```powershell
+sdd-frl finalize . --run-id <run_id>
+```
+
+## 失败处理
+
+| 错误或状态 | 处理 |
+|---|---|
+| `WORKSPACE_NOT_INITIALIZED` | 在目标项目执行 `sdd-frl init .` |
+| `TIMEZONE_REQUIRED` | 执行 `sdd-frl init . --timezone Asia/Shanghai` |
+| `WORKSPACE_PROJECT_MISMATCH` | 检查 marker 与 `.sdd-frl/config.json` 的项目 ID |
+| `AGENT_CONFIG_UNAVAILABLE` | 重新执行 `sdd-frl init .` 并在可信项目中打开新对话 |
+| `AGENTS_DISABLED` | 移除项目配置中禁用原生子代理的设置 |
+| `STAGE_ORDER_INVALID` | 按上一条 handoff 的 `next_action` 继续，不跳阶段 |
+| `RUN_IDENTITY_MISMATCH` | 丢弃错误 Agent 输出，不跨运行复用 |
+| `AGENT_OUTPUT_INVALID` | 查看 Agent 输出并按对应 Schema 修复 |
+| `OVERLAPPING_RUN` | 等待当前运行结束，不要并行启动第二次 |
+| `SETUP_BLOCKED` | 按 Codex 返回的具体原因处理后，重新执行 quickstart 第三步 |
+| `FAILED_*` | 查看 `.sdd-frl/runs/<run_id>/report.md` |
+
+失败运行不会覆盖同一天已有的成功报告。
+
+## 写入边界
+
+- Codex 会话目录只读。
+- 配置、锁、运行记录和报告只能写入当前项目。
+- Analyst 与 Optimizer 使用项目级只读 Agent TOML；Python 不再启动嵌套
+  `codex exec`。
+- Optimizer 只生成提案，不自动修改、提交、发布或部署文件。
+- 已有 `README.md` 或 `quickstart.md` 不会被初始化器覆盖。
+
+## 本仓库开发
+
+CLI 契约（contract）和数据规则：
+
+- [docs/uv-cli.md](docs/uv-cli.md)
+- [docs/contracts/precedence.md](docs/contracts/precedence.md)
+- [docs/privacy.md](docs/privacy.md)
+
+运行测试：
+
+```powershell
+uv run pytest
 npm test
-npm run validate:examples
-npm run probe
 ```
-
-## 旧版集中式配置（兼容保留）
-
-复制 `failure-review.config.example.json` 为 `failure-review.config.json`，然后设置：
-
-| 字段 | 含义 |
-|---|---|
-| `project_bindings` | 项目根目录、marker、显式会话和本项目可用的 `improvement_target_ids` |
-| `improvement_targets` | Skill、AGENTS.md、提示词、脚本或模板的全局定义 |
-| `models` | 三个模型阶段的实际模型与推理强度 |
-| `privacy.content_mode` | 是否执行常见密钥脱敏 |
-
-例：
-
-```json
-{
-  "project_bindings": [
-    {
-      "project_id": "my-project",
-      "roots": ["."],
-      "marker_file": "failure-review.project.json",
-      "conversation_ids": [],
-      "improvement_target_ids": ["project-agents", "project-skill"]
-    }
-  ],
-  "improvement_targets": [
-    { "id": "project-agents", "type": "agents", "path": "../AGENTS.md" },
-    { "id": "project-skill", "type": "skill", "path": "../my-skill/SKILL.md" }
-  ]
-}
-```
-
-多项目配置必须为每个项目绑定目标 ID，防止读取其他项目的改进载体。单项目旧配置仍兼容 `target_skill_allowlist`。
-
-## 旧版集中式运行（兼容保留）
-
-时间窗口采用半开区间 `[window_start, window_end)`：
-
-```powershell
-node src/cli.js run `
-  --config failure-review.config.json `
-  --project-id failure-review-loop `
-  --window-start 2026-07-24T00:00:00+08:00 `
-  --window-end 2026-07-25T00:00:00+08:00 `
-  --timezone Asia/Shanghai
-```
-
-可选的 `--target-skill C:\path\to\SKILL.md` 只能从当前项目绑定的 Skill 目标中进一步缩小范围，不能扩大允许清单。
-
-失败重试使用原参数并加 `--run-id <原 run_id>`。如果改进目标内容已经变化，必须开始新运行，不能把不同目标版本混入同一 run。
-
-独立校验：
-
-```powershell
-node src/cli.js validate --kind evidence --file runs\<run_id>\evidence.json --run runs\<run_id>\run.json
-node src/cli.js validate --kind findings --file runs\<run_id>\findings.json --run runs\<run_id>\run.json --evidence runs\<run_id>\evidence.json
-node src/cli.js validate --kind metrics --file runs\<run_id>\metrics.json --run runs\<run_id>\run.json --findings runs\<run_id>\findings.json
-node src/cli.js validate --kind trend --file runs\<run_id>\trend.json --run runs\<run_id>\run.json --metrics runs\<run_id>\metrics.json --baseline-metrics baseline-metrics.json
-```
-
-`baseline-metrics.json` 是 `trend.json` 中 `baseline_run_ids` 对应的 metrics JSON 数组。
-趋势校验必须提供它，Validator 会重新计算完整趋势，不能只检查字段形状。
-
-## 运行结果
-
-| 状态 | 含义 |
-|---|---|
-| `COMPLETED_NO_TASKS` | 时间窗口内没有可分析任务 |
-| `COMPLETED_WITH_METRICS` | 已生成效能、达成率和趋势，没有达到门槛的问题簇 |
-| `COMPLETED_WITH_FINDINGS` | 有高频问题，但未配置目标或没有证据支持的目标位置 |
-| `COMPLETED_WITH_PROPOSAL` | 已生成供人工确认的提案 |
-| `FAILED_*` | 对应阶段失败，下游停止 |
-
-运行产物默认被 Git 忽略。隐私策略见 `docs/privacy.md`，任务去重与门槛见 `docs/contracts/deduplication.md`。
-
-## 自动化边界
-
-- Optimizer 只生成提案，不修改、提交、合并、发布或部署任何载体。
-- 每个 eligible issue cluster 必须得到 `proposed` 或 `no_supported_target` 处置。
-- 纯环境问题不会生成载体优化提案。
-- 历史运行只有在成功结束、契约身份一致，并且 evidence → findings → metrics 全链路重新校验通过后才会进入趋势。

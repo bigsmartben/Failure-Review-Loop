@@ -1,4 +1,4 @@
-# 实施状态（2026-07-24）
+# 实施状态（2026-07-27）
 
 ## 已落地
 
@@ -14,25 +14,29 @@
 | 多载体安全 | 完成 | 项目级目标绑定、精确路径校验、内容哈希和防修改检查 |
 | 改进提案 | 完成 | 按问题簇提案、预期指标方向、结构化无支持目标处置 |
 | 报告 | 完成 | 达成率 → 效能 → 趋势 → 高频问题 → 提案 |
+| Codex App 宿主 | 完成 | Scheduled Task 负责定时与原生子代理编排 |
+| 原生 Agent | 完成 | 项目级 TOML 固定模型、推理强度和只读边界 |
+| Handoff 状态机 | 完成 | `prepare → continue → finalize`，Schema 与稳定阻塞码 |
+| 配置迁移 | 完成 | `config.json.models` 一次性迁移至 `.codex/agents/*.toml` |
 
-验证基线：`npm test` 32/32 通过；12 个 Schema 正反例全部通过。
+验证基线：`uv run pytest` 22/22 通过；`npm test` 42/42 通过。
 
 ## 模型映射
 
 | 阶段 | 模型 | 推理强度 |
 |---|---|---|
-| Collector | `gpt-5.6-terra` | `low` |
 | Analyst | `gpt-5.6-sol` | `high` |
-| Optimizer | `gpt-5.6-sol` | `xhigh` |
+| Optimizer | `gpt-5.6-sol` | `medium` |
 
-Metrics 与 Trend 不调用模型。
+Collector、Metrics 与 Trend 由 Python 确定性执行，不调用模型。模型配置的唯一所有者是
+`.codex/agents/sdd-frl-*.toml`。
 
 ## 生产启用前仍需配置
 
 - 实际项目根目录、marker 或 conversation ID；
 - 每个项目的 `improvement_target_ids`；
 - 真实载体路径及稳定 ID；
-- 定时表达式和生产时区；
+- 在 Codex App 确认本地项目、每天 09:00 和生产时区；
 - 保留期限和项目专用脱敏规则。
 
 历史旧结构运行保留，但不会进入新趋势。首次生产运行后应抽查任务切分、显式排除、

@@ -1,11 +1,19 @@
-# sdd-frl 工作区定时任务
+# sdd-frl Codex App 设置提示词模板
 
-本任务只复盘它所绑定的当前工作区。不要切换到其他项目或工作区运行。
+此文件仅说明模板职责。用户应复制目标项目运行 `sdd-frl init .` 后生成的
+`.sdd-frl/automation/task-prompt.md`，因为生成文件包含该项目的绝对路径、项目 ID
+和时区。
 
-1. 确认当前目录存在 `.sdd-frl/config.json` 与 `failure-review.project.json`。
-2. 执行 `sdd-frl run .`。CLI 会使用工作区配置的时区复盘最近一个完整自然日。
-3. 打开命令返回的 `report` 路径并报告状态、目标达成率、执行效能和主要问题。
-4. 失败时报告稳定错误码与 `.sdd-frl/runs/<run_id>/report.md`；不得把失败或空结果称为成功。
-5. Optimizer 只生成提案，不应用、提交、发布或部署修改。
+生成的提示词负责：
 
-所有中间产物、锁和最终文档必须留在当前工作区内。
+1. 请求 Codex App 创建每天 09:00 的定时任务。
+2. 只复盘它所绑定的当前工作区；创建前校验绝对路径、项目身份、项目可信状态、
+   原生 Agent 可用性和写权限。
+3. 首期只允许本地项目（local project）运行，不选择 worktree。
+4. 通过 `prepare → continue → finalize` handoff 状态机编排
+   `sdd_frl_analyst` 与 `sdd_frl_optimizer` 原生子代理。
+5. 禁止在 Python/CLI 中嵌套调用 `codex exec`，并禁止跳过 Schema、阶段顺序和
+   `run_id` 校验。
+6. 命令参数必须取自当前 handoff 字段，不得省略、复用或原样传递占位符。
+7. 所有中间产物、锁和最终文档必须留在当前工作区内；Agent 候选输出也不例外。
+8. 要求失败时返回稳定 blocker code（阻塞码），不把空结果或未完成状态称为成功。
