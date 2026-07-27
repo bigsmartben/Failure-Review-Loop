@@ -5,7 +5,7 @@
 `uv tool install` 接受 Python 包规格。当前仓库通过 `pyproject.toml` 暴露 `sdd-frl` 控制台入口：
 
 ```powershell
-uv tool install "sdd-frl @ git+ssh://git@github.com/bigsmartben/Failure-Review-Loop.git@v0.4.0"
+uv tool install "sdd-frl @ git+ssh://git@github.com/bigsmartben/Failure-Review-Loop.git@v0.4.1"
 ```
 
 使用 Git 标签而不是浮动分支，确保定时任务可以复现同一版本。
