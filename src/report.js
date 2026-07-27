@@ -1,4 +1,5 @@
 import { writeText } from "./io.js";
+import { renderFindingsSection } from "./findings-report.js";
 
 const LABELS = {
   COMPLETED_NO_TASKS: "本周期没有可分析任务",
@@ -41,7 +42,13 @@ function signedPercent(value) {
 }
 
 export async function writeReport(file, run, artifacts = {}) {
-  const { findings = null, metrics = null, trend = null, proposal = null } = artifacts;
+  const {
+    findings = null,
+    evidence = null,
+    metrics = null,
+    trend = null,
+    proposal = null
+  } = artifacts;
   const failed = run.status.startsWith("FAILED_");
   const headline = failed ? "运行失败" : (LABELS[run.status] ?? run.status);
   const lines = [
@@ -115,19 +122,7 @@ export async function writeReport(file, run, artifacts = {}) {
   }
 
   if (findings) {
-    lines.push("## 高频问题与根因", "");
-    if (!findings.issue_clusters.length) {
-      lines.push("没有识别到问题实例。");
-    } else {
-      for (const cluster of findings.issue_clusters) {
-        const eligible = findings.optimizer_eligible_cluster_ids.includes(cluster.issue_cluster_id);
-        lines.push(
-          `- \`${cluster.issue_cluster_id}\` ${PATTERN_LABELS[cluster.pattern]} / \`${cluster.issue_signature}\`：` +
-          `${cluster.instance_count} 个独立任务；根因 \`${cluster.root_cause_category}\`；` +
-          `达到门槛：${eligible ? "是" : "否"}`
-        );
-      }
-    }
+    lines.push(...renderFindingsSection(findings, evidence).split("\n"));
     lines.push("");
   }
 

@@ -132,6 +132,8 @@ sdd-frl finalize . --run-id <run_id>
 - Analyst 与 Optimizer 使用项目级只读 Agent TOML；Python 不再启动嵌套
   `codex exec`。
 - Optimizer 只生成提案，不自动修改、提交、发布或部署文件。
+- 问题报告始终输出可读、可回溯的问题小节；Optimizer 提案只有在问题簇通过
+  三个独立任务等就绪门后才生成。未达到门槛不会把报告退化为内部 ID 列表。
 - 已有 `README.md` 或 `quickstart.md` 不会被初始化器覆盖。
 
 ## 本仓库开发

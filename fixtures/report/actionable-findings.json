@@ -1,0 +1,147 @@
+{
+  "evidence": {
+    "records": [
+      {
+        "evidence_id": "ev_cleanup",
+        "source_location": "C:\\Users\\Alice\\private\\session.jsonl:42",
+        "content_or_reference": "token sk-live-super-secret appeared in raw conversation"
+      },
+      {
+        "evidence_id": "ev_delivery",
+        "source_location": "C:\\Users\\Alice\\private\\session.jsonl:99",
+        "content_or_reference": "raw conversation must never be copied"
+      }
+    ]
+  },
+  "findings": {
+    "task_episodes": [
+      {
+        "task_episode_id": "task_cleanup",
+        "goal": "清理嵌套评测仓库",
+        "expected_outcome": "主仓库与嵌套仓库均保持干净",
+        "outcome_status": "not_achieved",
+        "outcome_basis": "verified_expectation_mismatch",
+        "acceptance_criteria": [
+          {
+            "description": "清理目标后主仓库与嵌套仓库均保持干净"
+          }
+        ],
+        "facts": [
+          "首次清理命令被 Git-root 安全检查阻止。"
+        ],
+        "inferences": [
+          "安全比较可能没有先规范化路径。"
+        ],
+        "unknowns": []
+      },
+      {
+        "task_episode_id": "task_delivery",
+        "goal": "完成并推送治理工作流",
+        "expected_outcome": "变更已推送并合并",
+        "outcome_status": "unknown",
+        "outcome_basis": "insufficient_evidence",
+        "acceptance_criteria": [],
+        "facts": [
+          "运行记录中没有 Push、PR 或 Merge 的任务绑定。"
+        ],
+        "inferences": [],
+        "unknowns": [
+          "无法确认外部仓库是否收到变更。"
+        ]
+      }
+    ],
+    "problem_instances": [
+      {
+        "problem_instance_id": "pi_cleanup_unmet",
+        "task_episode_id": "task_cleanup",
+        "summary": "清理命令被路径安全检查错误阻止",
+        "facts": [
+          "等价 Windows 路径使用了不同的分隔符表示。"
+        ],
+        "inferences": [
+          "未规范化路径会导致等价路径比较失败。"
+        ],
+        "unknowns": [],
+        "evidence_ids": [
+          "ev_cleanup"
+        ]
+      },
+      {
+        "problem_instance_id": "pi_delivery_unmet",
+        "task_episode_id": "task_delivery",
+        "summary": "治理工作流没有完成用户要求的交付动作",
+        "facts": [
+          "交付在首次 Push 之前停止。"
+        ],
+        "inferences": [],
+        "unknowns": [
+          "停止是否由权限限制导致尚不明确。"
+        ],
+        "evidence_ids": [
+          "ev_delivery"
+        ]
+      },
+      {
+        "problem_instance_id": "pi_cleanup_repeat",
+        "task_episode_id": "task_cleanup",
+        "summary": "路径分隔符不一致导致清理命令重试",
+        "facts": [
+          "规范化路径后重试成功。"
+        ],
+        "inferences": [],
+        "unknowns": [
+          "缺少对应证据记录。"
+        ],
+        "evidence_ids": [
+          "ev_missing"
+        ]
+      }
+    ],
+    "issue_clusters": [
+      {
+        "issue_cluster_id": "ic_1111111111111111",
+        "pattern": "unmet_expectation",
+        "issue_signature": "result_does_not_match_requested_output",
+        "signature_status": "registered",
+        "root_cause_category": "workflow_gap",
+        "instance_count": 2,
+        "problem_instance_ids": [
+          "pi_cleanup_unmet",
+          "pi_delivery_unmet"
+        ],
+        "task_episode_ids": [
+          "task_cleanup",
+          "task_delivery"
+        ],
+        "severity_total": 4,
+        "root_cause": "工作流缺少把结构化结果推进到用户要求交付状态的完整步骤。",
+        "root_cause_confidence": "high",
+        "evidence_ids": [
+          "ev_cleanup",
+          "ev_delivery"
+        ]
+      },
+      {
+        "issue_cluster_id": "ic_2222222222222222",
+        "pattern": "repeated_execution",
+        "issue_signature": "path_separator_mismatch_blocks_cleanup",
+        "signature_status": "candidate",
+        "root_cause_category": "script_bug",
+        "instance_count": 1,
+        "problem_instance_ids": [
+          "pi_cleanup_repeat"
+        ],
+        "task_episode_ids": [
+          "task_cleanup"
+        ],
+        "severity_total": 1,
+        "root_cause": "路径字符串可能在安全比较前没有被规范化。",
+        "root_cause_confidence": "unknown",
+        "evidence_ids": [
+          "ev_missing"
+        ]
+      }
+    ],
+    "optimizer_eligible_cluster_ids": []
+  }
+}

@@ -13,7 +13,7 @@
 | 契约身份 | 完成 | `contract_revision`、契约包哈希和明确权威顺序 |
 | 多载体安全 | 完成 | 项目级目标绑定、精确路径校验、内容哈希和防修改检查 |
 | 改进提案 | 完成 | 按问题簇提案、预期指标方向、结构化无支持目标处置 |
-| 报告 | 完成 | 达成率 → 效能 → 趋势 → 高频问题 → 提案 |
+| 报告 | 完成 | 达成率 → 效能 → 趋势 → issue-ready 问题小节 → 提案；Python/JS 共享 golden contract |
 | Codex App 宿主 | 完成 | Scheduled Task 负责定时与原生子代理编排 |
 | 原生 Agent | 完成 | 项目级 TOML 固定模型、推理强度和只读边界 |
 | Handoff 状态机 | 完成 | `prepare → continue → finalize`，Schema 与稳定阻塞码 |

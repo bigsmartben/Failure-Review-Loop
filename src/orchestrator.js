@@ -306,6 +306,7 @@ export async function executeRun(options, dependencies = {}) {
 
   try {
     let source;
+    let evidence;
     try {
       await stageStart(runFile, run, "collector", "COLLECTING");
       source = await sourceLoader({
@@ -326,7 +327,7 @@ export async function executeRun(options, dependencies = {}) {
       });
       run.status = "VALIDATING_EVIDENCE";
       await saveRun(runFile, run);
-      const evidence = await readJson(artifactFile);
+      evidence = await readJson(artifactFile);
       const result = await validateArtifact("evidence", evidence, { run, source }, rootDir);
       if (!result.valid) throw new Error(JSON.stringify(result.errors));
       await stageSuccess(runFile, run, "collector", filename);
@@ -359,7 +360,6 @@ export async function executeRun(options, dependencies = {}) {
       run.status = "VALIDATING_FINDINGS";
       await saveRun(runFile, run);
       findings = await readJson(artifactFile);
-      const evidence = await readJson(path.join(runDir, "evidence.json"));
       const result = await validateArtifact("findings", findings, { run, evidence }, rootDir);
       if (!result.valid) throw new Error(JSON.stringify(result.errors));
       await stageSuccess(runFile, run, "analyst", filename);
@@ -411,14 +411,14 @@ export async function executeRun(options, dependencies = {}) {
       run.status = findings.task_episodes.length === 0 ? "COMPLETED_NO_TASKS" : "COMPLETED_WITH_METRICS";
       run.stages.optimizer.status = "skipped";
       await saveRun(runFile, run);
-      await writeReport(reportFile, run, { findings, metrics, trend });
+      await writeReport(reportFile, run, { findings, evidence, metrics, trend });
       return run;
     }
     if (improvementTargets.length === 0) {
       run.status = "COMPLETED_WITH_FINDINGS";
       run.stages.optimizer.status = "skipped";
       await saveRun(runFile, run);
-      await writeReport(reportFile, run, { findings, metrics, trend });
+      await writeReport(reportFile, run, { findings, evidence, metrics, trend });
       return run;
     }
 
@@ -464,7 +464,6 @@ export async function executeRun(options, dependencies = {}) {
       run.status = "VALIDATING_PROPOSAL";
       await saveRun(runFile, run);
       const proposal = await readJson(artifactFile);
-      const evidence = await readJson(path.join(runDir, "evidence.json"));
       const result = await validateArtifact("proposal", proposal, { run, evidence, findings }, rootDir);
       if (!result.valid) throw new Error(JSON.stringify(result.errors));
       await stageSuccess(runFile, run, "optimizer", filename);
@@ -472,7 +471,7 @@ export async function executeRun(options, dependencies = {}) {
         ? "COMPLETED_WITH_PROPOSAL"
         : "COMPLETED_WITH_FINDINGS";
       await saveRun(runFile, run);
-      await writeReport(reportFile, run, { findings, metrics, trend, proposal });
+      await writeReport(reportFile, run, { findings, evidence, metrics, trend, proposal });
       return run;
     } catch (error) {
       const validation = run.status === "VALIDATING_PROPOSAL";

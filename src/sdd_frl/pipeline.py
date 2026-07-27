@@ -491,6 +491,8 @@ def _finalize_artifacts(
             artifacts[name] = read_json(file)
     source_file = run_dir / "source-records.json"
     source = read_json(source_file) if source_file.exists() else None
+    evidence_file = run_dir / "evidence.json"
+    evidence = read_json(evidence_file) if evidence_file.exists() else None
     write_text_atomic(
         raw_report,
         render_report(
@@ -498,6 +500,7 @@ def _finalize_artifacts(
             review_date=review_date,
             source=source,
             findings=artifacts.get("findings"),
+            evidence=evidence,
             metrics=artifacts.get("metrics"),
             trend=artifacts.get("trend"),
             proposal=artifacts.get("proposal"),
