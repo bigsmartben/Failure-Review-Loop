@@ -13,14 +13,15 @@
 
 ## 创建步骤
 
-1. 安装 `sdd-frl`。
-2. 在目标项目运行 `sdd-frl init .`。
-3. 手工运行一次 `sdd-frl probe .` 和 `sdd-frl run . --date YYYY-MM-DD`。
-4. 在 Codex 桌面端创建定时任务，把项目设为该目标项目。
-5. 将 `.sdd-frl/automation/task-prompt.md` 全文粘贴到任务描述。
-6. 设置周期、时区和通知。
+用户只有三步操作：
 
-CLI 默认复盘配置时区内最近一个完整自然日，因此每天运行一次时无需由模型计算窗口。
+1. 使用 `uv tool install` 从 Git 标签安装 `sdd-frl`。
+2. 在目标项目运行 `sdd-frl init .`。
+3. 打开生成的 `.sdd-frl/automation/task-prompt.md`，复制全文并在 Codex App 当前项目的对话中发送。
+
+用户不需要手工执行 `probe`、`run`，也不需要自己设置周期、时区或任务描述。
+生成的提示词包含目标工作区绝对路径、项目 ID、配置时区和每天 09:00 的频率。
+定时任务内部执行 `sdd-frl run .`，默认复盘配置时区内最近一个完整自然日。
 
 ## 写入边界
 

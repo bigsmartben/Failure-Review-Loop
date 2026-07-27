@@ -10,6 +10,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from tzlocal import get_localzone_name
 
+from . import __version__
 from .errors import SddFrlError
 from .io import ensure_within, read_json, relative_posix, write_json_atomic, write_text_atomic
 
@@ -17,6 +18,8 @@ PROJECT_ID_PATTERN = re.compile(r"^[a-z0-9][a-z0-9-]{0,62}$")
 MARKER_NAME = "failure-review.project.json"
 CONFIG_RELATIVE = Path(".sdd-frl/config.json")
 TASK_PROMPT_RELATIVE = Path(".sdd-frl/automation/task-prompt.md")
+README_RELATIVE = Path(".sdd-frl/README.md")
+QUICKSTART_RELATIVE = Path(".sdd-frl/quickstart.md")
 
 DEFAULT_MODELS = {
     "analyst": {
@@ -31,7 +34,7 @@ DEFAULT_MODELS = {
     },
 }
 
-TASK_PROMPT = """# sdd-frl 工作区定时任务
+LEGACY_TASK_PROMPT = """# sdd-frl 工作区定时任务
 
 本任务只复盘它所绑定的当前工作区。不要切换到其他项目或工作区运行。
 
@@ -42,6 +45,70 @@ TASK_PROMPT = """# sdd-frl 工作区定时任务
 5. Optimizer 只生成提案，不应用、提交、发布或部署修改。
 
 所有中间产物、锁和最终文档必须留在当前工作区内。
+"""
+
+GENERATED_PROMPT_HEADER = "<!-- sdd-frl-generated: codex-automation-setup-v1 -->"
+
+
+def _task_prompt(root: Path, project_id: str, timezone_name: str) -> str:
+    return f"""{GENERATED_PROMPT_HEADER}
+# 请在 Codex App 中创建工作区定时任务
+
+请为下面的目标工作区创建一个定时任务（scheduled task / automation）：
+
+- 名称：`sdd-frl · {project_id}`
+- 频率：每天 09:00
+- 时区：`{timezone_name}`
+- 目标工作区：`{root}`
+
+定时任务的执行提示词必须是：
+
+> 只复盘目标工作区 `{root}`，不得切换到其他项目或工作区。
+> 确认 `.sdd-frl/config.json` 与 `failure-review.project.json` 存在，然后在该工作区执行 `sdd-frl run .`。
+> 打开命令返回的 `report` 路径，报告状态、目标达成率、执行效能和主要问题。
+> 失败时报告稳定错误码与 `.sdd-frl/runs/<run_id>/report.md`，不得把失败或空结果称为成功。
+> Optimizer 只生成提案，不应用、提交、发布或部署修改。
+> 所有中间产物、锁和最终文档必须留在目标工作区内。
+
+创建前确认任务绑定的工作目录就是上述绝对路径。创建完成后，只回复任务名称、工作区、频率、时区和启用状态。
+如果当前环境不能创建定时任务，回复 `SETUP_BLOCKED` 和具体原因；不得声称任务已经创建。
+"""
+
+
+def _workspace_readme(project_id: str) -> str:
+    return f"""# sdd-frl
+
+此目录属于项目 `{project_id}` 的 Failure Review Loop，不是项目源码目录。
+
+- `config.json`：项目、时区、运行目录和报告目录配置。
+- `quickstart.md`：用户仅需执行的三步操作。
+- `automation/task-prompt.md`：完整复制到 Codex App 对话中的一次性设置提示词。
+- `runs/`：每次复盘的证据、指标和日志。
+
+最终文档位于 `../docs/failure-review/YYYY-MM-DD.md`。不要把任务绑定到其他工作区。
+"""
+
+
+def _quickstart() -> str:
+    return f"""# 三步完成 sdd-frl 设置
+
+## 1. 安装
+
+```powershell
+uv tool install "sdd-frl @ git+ssh://git@github.com/bigsmartben/Failure-Review-Loop.git@v{__version__}"
+```
+
+## 2. 在目标项目初始化
+
+```powershell
+sdd-frl init .
+```
+
+## 3. 在 Codex App 创建定时任务
+
+打开 `.sdd-frl/automation/task-prompt.md`，复制全文，在 Codex App 当前项目的对话中发送。
+
+不需要手工执行 `probe`、`run` 或配置计划任务；Codex App 会按照提示词创建绑定到当前工作区的每日任务。任务内部执行 `sdd-frl run .`，不能绑定到中央 `Failure-Review-Loop` 运行器。
 """
 
 GITIGNORE_BLOCK = """# sdd-frl runtime state
@@ -282,10 +349,32 @@ def init_workspace(
         )
         created.append(MARKER_NAME)
 
+    readme = root / README_RELATIVE
+    if not readme.exists():
+        write_text_atomic(readme, _workspace_readme(resolved_project))
+        created.append(relative_posix(readme, root))
+
+    quickstart = root / QUICKSTART_RELATIVE
+    if not quickstart.exists():
+        write_text_atomic(quickstart, _quickstart())
+        created.append(relative_posix(quickstart, root))
+
     task_prompt = root / TASK_PROMPT_RELATIVE
+    expected_prompt = _task_prompt(root, resolved_project, config["timezone"])
     if not task_prompt.exists():
-        write_text_atomic(task_prompt, TASK_PROMPT)
+        write_text_atomic(task_prompt, expected_prompt)
         created.append(relative_posix(task_prompt, root))
+    else:
+        existing_prompt = task_prompt.read_text(encoding="utf-8")
+        generated_prompt = existing_prompt.startswith(GENERATED_PROMPT_HEADER)
+        legacy_prompt = existing_prompt.strip() == LEGACY_TASK_PROMPT.strip()
+        if existing_prompt != expected_prompt and (generated_prompt or legacy_prompt):
+            write_text_atomic(task_prompt, expected_prompt)
+            created.append(f"{relative_posix(task_prompt, root)} (updated)")
+        elif existing_prompt != expected_prompt:
+            warnings.append(
+                "现有 .sdd-frl/automation/task-prompt.md 不是生成模板，已保留且未覆盖。"
+            )
 
     for directory in (
         root / config["runs_dir"],

@@ -7,13 +7,15 @@
 `sdd-frl` 是原生 Python CLI，通过 uv 的隔离工具环境安装；运行时不依赖 Node/npm。
 
 ```powershell
-uv tool install "sdd-frl @ git+ssh://git@github.com/bigsmartben/Failure-Review-Loop.git@v0.2.2"
+uv tool install "sdd-frl @ git+ssh://git@github.com/bigsmartben/Failure-Review-Loop.git@v0.3.0"
 sdd-frl init .
-sdd-frl run .
 ```
 
-每个项目独立初始化。中间产物写入 `.sdd-frl/runs/<run_id>/`，最终文档按复盘日期写入
-`docs/failure-review/YYYY-MM-DD.md`。同日重跑保留原始运行记录，并更新同一份最终文档。
+初始化后，打开 `.sdd-frl/automation/task-prompt.md`，复制全文并粘贴到 Codex App
+当前项目的对话中。Codex App 将据此创建绑定到该工作区的每日定时任务。
+
+用户只需以上三步。中间产物写入 `.sdd-frl/runs/<run_id>/`，最终文档按复盘日期
+写入 `docs/failure-review/YYYY-MM-DD.md`。
 
 完整安装、目录和失败语义见 [docs/uv-cli.md](docs/uv-cli.md)，定时任务设置见
 [quickstart.md](quickstart.md)。
