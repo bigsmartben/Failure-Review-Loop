@@ -8,13 +8,59 @@ import pytest
 
 from sdd_frl.errors import SddFrlError
 from sdd_frl.pipeline import (
+    _normalize_targets,
     continue_review,
     finalize_review,
     prepare_review,
     review_window,
 )
 from sdd_frl.report import publish_report
-from sdd_frl.workspace import init_workspace, load_workspace
+from sdd_frl.workspace import init_workspace as _init_workspace, load_workspace, slug
+
+
+def init_workspace(path: str | Path, **kwargs):
+    workspace = Path(path)
+    if kwargs.get("analysis_target") is None:
+        target = workspace.parent / f"{workspace.name}-analysis-target"
+        target.mkdir(exist_ok=True)
+        kwargs["analysis_target"] = target
+        kwargs.setdefault("analysis_project_id", slug(workspace.name))
+    return _init_workspace(path, **kwargs)
+
+
+def configure_target_session(
+    project: Path,
+    *,
+    timestamps: tuple[str, ...] = ("2026-07-25T23:00:00+08:00",),
+) -> None:
+    workspace = load_workspace(project)
+    codex_home = project.parent / f"{project.name}-codex-home"
+    sessions = codex_home / "sessions"
+    sessions.mkdir(parents=True, exist_ok=True)
+    config = json.loads(workspace.config_file.read_text("utf-8"))
+    config["codex_home"] = str(codex_home)
+    workspace.config_file.write_text(json.dumps(config), encoding="utf-8")
+    rows = [{
+        "type": "session_meta",
+        "payload": {
+            "id": f"{project.name}-target-conversation",
+            "cwd": str(workspace.analysis_root),
+            "projectId": None,
+        },
+    }]
+    rows.extend({
+        "type": "response_item",
+        "timestamp": timestamp,
+        "payload": {
+            "type": "message",
+            "role": "user",
+            "content": "fixture event",
+        },
+    } for timestamp in timestamps)
+    (sessions / "target.jsonl").write_text(
+        "".join(f"{json.dumps(row)}\n" for row in rows),
+        encoding="utf-8",
+    )
 
 
 def test_review_window_uses_previous_complete_local_day() -> None:
@@ -27,6 +73,30 @@ def test_review_window_uses_previous_complete_local_day() -> None:
     assert end == "2026-07-27T00:00:00+08:00"
 
 
+def test_improvement_targets_are_read_from_analysis_target(tmp_path: Path) -> None:
+    runner = tmp_path / "runner"
+    target = tmp_path / "target"
+    runner.mkdir()
+    target.mkdir()
+    (target / "AGENTS.md").write_text("target rules", encoding="utf-8")
+    init_workspace(
+        runner,
+        timezone_name="Asia/Shanghai",
+        analysis_target=target,
+        analysis_project_id="target",
+    )
+    config_file = runner / ".sdd-frl/config.json"
+    config = json.loads(config_file.read_text("utf-8"))
+    config["improvement_targets"] = [
+        {"id": "target-agents", "type": "agents", "path": "AGENTS.md"}
+    ]
+    config_file.write_text(json.dumps(config), encoding="utf-8")
+
+    targets, _ = _normalize_targets(load_workspace(runner))
+
+    assert targets[0]["path"] == str((target / "AGENTS.md").resolve())
+
+
 def test_empty_run_stays_in_workspace_and_publishes_date(
     tmp_path: Path,
     monkeypatch,
@@ -37,6 +107,13 @@ def test_empty_run_stays_in_workspace_and_publishes_date(
     project.mkdir()
     monkeypatch.setenv("CODEX_HOME", str(codex_home))
     init_workspace(project, timezone_name="Asia/Shanghai")
+    configure_target_session(
+        project,
+        timestamps=(
+            "2026-07-25T23:00:00+08:00",
+            "2026-07-27T01:00:00+08:00",
+        ),
+    )
 
     prepared = prepare_review(project, review_date="2026-07-26")
     assert prepared["next_action"] == "FINALIZE"
@@ -50,6 +127,10 @@ def test_empty_run_stays_in_workspace_and_publishes_date(
     assert Path(result["report"]) == final_report
     assert final_report.is_file()
     assert "project_id: product" in final_report.read_text("utf-8")
+    report_text = final_report.read_text("utf-8")
+    assert "目标对话存在，但该窗口无可分析事件" in report_text
+    assert "窗口前 / 窗口内 / 窗口后记录：1 / 0 / 1" in report_text
+    assert "结束时刻及之后" in report_text
     run_dir = project / ".sdd-frl/runs" / result["run_id"]
     for name in (
         "run.json",
@@ -66,6 +147,53 @@ def test_empty_run_stays_in_workspace_and_publishes_date(
     )
 
 
+def test_collection_failure_is_not_reported_as_no_tasks(tmp_path: Path) -> None:
+    project = tmp_path / "product"
+    codex_home = tmp_path / "codex-home"
+    (codex_home / "sessions").mkdir(parents=True)
+    project.mkdir()
+    init_workspace(project, timezone_name="Asia/Shanghai")
+    config_file = project / ".sdd-frl/config.json"
+    config = json.loads(config_file.read_text("utf-8"))
+    config["codex_home"] = str(codex_home)
+    config_file.write_text(json.dumps(config), encoding="utf-8")
+
+    result = prepare_review(project, review_date="2026-07-26")
+
+    assert result["status"] == "FAILED_COLLECTION"
+    assert result["next_action"] == "STOP"
+    assert result["blocker_codes"] == [
+        "ANALYSIS_TARGET_CONVERSATIONS_NOT_FOUND"
+    ]
+    run_dir = project / ".sdd-frl/runs" / result["run_id"]
+    source = json.loads((run_dir / "source-records.json").read_text("utf-8"))
+    assert source["empty_reason"] == "ANALYSIS_TARGET_CONVERSATIONS_NOT_FOUND"
+    assert "运行失败" in (run_dir / "report.md").read_text("utf-8")
+
+
+def test_unavailable_source_returns_stable_collection_blocker(
+    tmp_path: Path,
+) -> None:
+    project = tmp_path / "product"
+    project.mkdir()
+    init_workspace(project, timezone_name="Asia/Shanghai")
+    config_file = project / ".sdd-frl/config.json"
+    config = json.loads(config_file.read_text("utf-8"))
+    config["codex_home"] = str(tmp_path / "missing-codex-home")
+    config_file.write_text(json.dumps(config), encoding="utf-8")
+
+    result = prepare_review(project, review_date="2026-07-26")
+
+    assert result["status"] == "FAILED_COLLECTION"
+    assert result["blocker_codes"] == ["CODEX_SOURCE_UNAVAILABLE"]
+    assert not (
+        project
+        / ".sdd-frl/runs"
+        / result["run_id"]
+        / "source-records.json"
+    ).exists()
+
+
 def test_native_analyst_handoff_validates_output_and_finalizes(
     tmp_path: Path,
     monkeypatch,
@@ -73,6 +201,7 @@ def test_native_analyst_handoff_validates_output_and_finalizes(
     project = tmp_path / "product"
     project.mkdir()
     init_workspace(project, timezone_name="Asia/Shanghai")
+    configure_target_session(project)
 
     def evidence_packet(source, *, run_id, contract_revision, contract_hash):
         del source
@@ -145,6 +274,7 @@ def test_continue_rejects_out_of_order_stage(tmp_path: Path, monkeypatch) -> Non
     project = tmp_path / "product"
     project.mkdir()
     init_workspace(project, timezone_name="Asia/Shanghai")
+    configure_target_session(project)
     monkeypatch.setattr(
         "sdd_frl.pipeline.build_evidence",
         lambda source, *, run_id, contract_revision, contract_hash: {
@@ -184,6 +314,7 @@ def test_continue_stops_on_agent_run_identity_mismatch(
     project = tmp_path / "product"
     project.mkdir()
     init_workspace(project, timezone_name="Asia/Shanghai")
+    configure_target_session(project)
     monkeypatch.setattr(
         "sdd_frl.pipeline.build_evidence",
         lambda source, *, run_id, contract_revision, contract_hash: {

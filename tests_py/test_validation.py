@@ -2,7 +2,10 @@ from __future__ import annotations
 
 import json
 
-from sdd_frl.validation import schema_errors
+import pytest
+
+from sdd_frl.errors import COLLECTION_BLOCKER_CODES, SddFrlError
+from sdd_frl.validation import schema_errors, validate_source_records
 
 
 def test_packaged_schemas_are_available() -> None:
@@ -59,3 +62,47 @@ def test_handoff_schema_requires_structured_agent_packet() -> None:
 
     assert schema_errors("handoff", valid) == []
     assert schema_errors("handoff", invalid)
+
+
+def test_source_records_schema_and_semantic_counts_are_frozen() -> None:
+    valid = {
+        "schema_version": "1.0.0",
+        "source_kind": "local_codex_sessions_jsonl",
+        "project_id": "harness",
+        "window_start": "2026-07-26T00:00:00+08:00",
+        "window_end": "2026-07-27T00:00:00+08:00",
+        "empty_reason": "NO_EVENTS_IN_WINDOW",
+        "collection_summary": {
+            "session_files_scanned": 1,
+            "target_conversations_matched": 1,
+            "records_before_window": 1,
+            "records_in_window": 0,
+            "records_after_window": 0,
+            "skipped_missing_meta": 0,
+            "skipped_outside_target": 0,
+            "skipped_uncollectable": 0,
+        },
+        "conversations": [{
+            "conversation_id": "conversation-1",
+            "project_id": "harness",
+            "binding_method": "analysis_target_workspace_root",
+            "has_events_before_window": True,
+            "has_events_after_window": False,
+            "records": [],
+        }],
+    }
+    invalid = json.loads(json.dumps(valid))
+    invalid["collection_summary"]["records_in_window"] = 1
+
+    assert schema_errors("source-records", valid) == []
+    validate_source_records(valid)
+    with pytest.raises(SddFrlError) as caught:
+        validate_source_records(invalid)
+    assert caught.value.code == "SOURCE_RECORDS_COUNT_MISMATCH"
+
+
+def test_collection_blocker_registry_is_stable() -> None:
+    assert COLLECTION_BLOCKER_CODES == {
+        "CODEX_SOURCE_UNAVAILABLE",
+        "ANALYSIS_TARGET_CONVERSATIONS_NOT_FOUND",
+    }

@@ -1,0 +1,9 @@
+{
+  "schema_version": "1.0.0",
+  "source_kind": "local_codex_sessions_jsonl",
+  "project_id": "harness",
+  "window_start": "2026-07-26T00:00:00+08:00",
+  "window_end": "2026-07-27T00:00:00+08:00",
+  "empty_reason": "NO_EVENTS_IN_WINDOW",
+  "conversations": []
+}

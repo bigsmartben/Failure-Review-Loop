@@ -10,6 +10,7 @@ CONTRACT_FILES = (
     ("contracts", "precedence.md"),
     ("contracts", "deduplication.md"),
     ("contracts", "issue-signatures.json"),
+    ("schemas", "source-records.schema.json"),
     ("schemas", "run.schema.json"),
     ("schemas", "evidence.schema.json"),
     ("schemas", "findings.schema.json"),

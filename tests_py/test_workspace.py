@@ -9,10 +9,25 @@ from sdd_frl.errors import SddFrlError
 from sdd_frl.workspace import (
     _legacy_quickstart,
     _legacy_workspace_readme,
-    init_workspace,
+    init_workspace as _init_workspace,
     inspect_agent_configuration,
     load_workspace,
+    slug,
 )
+
+
+def _analysis_target(path: Path) -> Path:
+    return path.parent / f"{path.name}-analysis-target"
+
+
+def init_workspace(path: str | Path, **kwargs):
+    workspace = Path(path)
+    if kwargs.get("analysis_target") is None:
+        target = _analysis_target(workspace)
+        target.mkdir(exist_ok=True)
+        kwargs["analysis_target"] = target
+        kwargs.setdefault("analysis_project_id", slug(workspace.name))
+    return _init_workspace(path, **kwargs)
 
 
 def test_init_creates_workspace_contract_and_is_idempotent(tmp_path: Path) -> None:
@@ -31,6 +46,10 @@ def test_init_creates_workspace_contract_and_is_idempotent(tmp_path: Path) -> No
     assert (project / ".sdd-frl/config.json").is_file()
     config = json.loads((project / ".sdd-frl/config.json").read_text("utf-8"))
     assert "models" not in config
+    assert config["analysis_target"] == {
+        "workspace_root": str(_analysis_target(project).resolve()),
+        "project_id": "my-product",
+    }
     analyst_agent = (project / ".codex/agents/sdd-frl-analyst.toml").read_text("utf-8")
     optimizer_agent = (project / ".codex/agents/sdd-frl-optimizer.toml").read_text("utf-8")
     assert 'name = "sdd_frl_analyst"' in analyst_agent
@@ -60,7 +79,7 @@ def test_init_creates_workspace_contract_and_is_idempotent(tmp_path: Path) -> No
     assert quickstart.count("```text") == 1
     prompt = (project / ".sdd-frl/automation/task-prompt.md").read_text("utf-8")
     assert str(project.resolve()) in prompt
-    assert "sdd-frl · my-product" in prompt
+    assert "sdd-frl-my-product" in prompt
     assert "每天 09:00" in prompt
     assert "Asia/Shanghai" in prompt
     assert "SETUP_BLOCKED" in prompt
@@ -72,6 +91,96 @@ def test_init_creates_workspace_contract_and_is_idempotent(tmp_path: Path) -> No
     ignore = (project / ".gitignore").read_text("utf-8")
     assert ".sdd-frl/runs/" in ignore
     assert load_workspace(project).project_id == "my-product"
+
+
+def test_init_separates_runner_workspace_from_analysis_target(tmp_path: Path) -> None:
+    runner = tmp_path / "frl-runner"
+    target = tmp_path / "harness"
+    runner.mkdir()
+    target.mkdir()
+
+    result = init_workspace(
+        runner,
+        project_id="frl-runner",
+        timezone_name="Asia/Shanghai",
+        analysis_target=target,
+        analysis_project_id="harness",
+    )
+
+    assert result["analysis_target"] == {
+        "workspace_root": str(target.resolve()),
+        "project_id": "harness",
+    }
+    config = json.loads((runner / ".sdd-frl/config.json").read_text("utf-8"))
+    assert config["project_id"] == "frl-runner"
+    assert config["analysis_target"] == result["analysis_target"]
+    workspace = load_workspace(runner)
+    assert workspace.root == runner.resolve()
+    assert workspace.workspace_project_id == "frl-runner"
+    assert workspace.analysis_root == target.resolve()
+    assert workspace.project_id == "harness"
+    prompt = (runner / ".sdd-frl/automation/task-prompt.md").read_text("utf-8")
+    assert f"FRL 工作区：`{runner.resolve()}`" in prompt
+    assert f"分析目标：`{target.resolve()}`" in prompt
+    assert "名称：`sdd-frl-harness`" in prompt
+    assert f"分析目标 `{target.resolve()}` 只读" in prompt
+    assert not (target / ".sdd-frl").exists()
+
+
+def test_reinit_preserves_configured_analysis_target_without_flag(
+    tmp_path: Path,
+) -> None:
+    runner = tmp_path / "runner"
+    target = tmp_path / "target"
+    runner.mkdir()
+    target.mkdir()
+    init_workspace(
+        runner,
+        timezone_name="Asia/Shanghai",
+        analysis_target=target,
+        analysis_project_id="target-project",
+    )
+
+    result = _init_workspace(runner, timezone_name="Asia/Shanghai")
+    config = json.loads((runner / ".sdd-frl/config.json").read_text("utf-8"))
+
+    assert result["status"] == "already_initialized"
+    assert result["project_id"] == "target-project"
+    assert config["analysis_target"] == {
+        "workspace_root": str(target.resolve()),
+        "project_id": "target-project",
+    }
+
+
+def test_load_workspace_rejects_missing_analysis_target(tmp_path: Path) -> None:
+    runner = tmp_path / "runner"
+    target = tmp_path / "target"
+    runner.mkdir()
+    target.mkdir()
+    init_workspace(runner, analysis_target=target)
+    target.rmdir()
+
+    with pytest.raises(SddFrlError) as caught:
+        load_workspace(runner)
+
+    assert caught.value.code == "ANALYSIS_TARGET_NOT_DIRECTORY"
+
+
+def test_init_requires_a_distinct_analysis_target(tmp_path: Path) -> None:
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+
+    with pytest.raises(SddFrlError) as missing:
+        _init_workspace(workspace, timezone_name="Asia/Shanghai")
+    with pytest.raises(SddFrlError) as same:
+        _init_workspace(
+            workspace,
+            timezone_name="Asia/Shanghai",
+            analysis_target=workspace,
+        )
+
+    assert missing.value.code == "ANALYSIS_TARGET_REQUIRED"
+    assert same.value.code == "ANALYSIS_TARGET_MUST_DIFFER"
 
 
 def test_init_moves_known_generated_guides_to_project_root(tmp_path: Path) -> None:

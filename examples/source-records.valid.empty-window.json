@@ -1,0 +1,28 @@
+{
+  "schema_version": "1.0.0",
+  "source_kind": "local_codex_sessions_jsonl",
+  "project_id": "harness",
+  "window_start": "2026-07-26T00:00:00+08:00",
+  "window_end": "2026-07-27T00:00:00+08:00",
+  "empty_reason": "NO_EVENTS_IN_WINDOW",
+  "collection_summary": {
+    "session_files_scanned": 2,
+    "target_conversations_matched": 1,
+    "records_before_window": 1,
+    "records_in_window": 0,
+    "records_after_window": 1,
+    "skipped_missing_meta": 0,
+    "skipped_outside_target": 1,
+    "skipped_uncollectable": 0
+  },
+  "conversations": [
+    {
+      "conversation_id": "target-conversation",
+      "project_id": "harness",
+      "binding_method": "analysis_target_workspace_root",
+      "has_events_before_window": true,
+      "has_events_after_window": true,
+      "records": []
+    }
+  ]
+}

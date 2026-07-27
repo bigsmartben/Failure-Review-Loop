@@ -1,0 +1,128 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://failure-review-loop.local/schemas/source-records.schema.json",
+  "title": "Deterministic Codex Session Collection",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "source_kind",
+    "project_id",
+    "window_start",
+    "window_end",
+    "empty_reason",
+    "collection_summary",
+    "conversations"
+  ],
+  "properties": {
+    "schema_version": { "const": "1.0.0" },
+    "source_kind": { "const": "local_codex_sessions_jsonl" },
+    "project_id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]{0,62}$" },
+    "window_start": { "type": "string", "format": "date-time" },
+    "window_end": { "type": "string", "format": "date-time" },
+    "empty_reason": {
+      "type": ["string", "null"],
+      "enum": [
+        null,
+        "NO_EVENTS_IN_WINDOW",
+        "EVENTS_IN_WINDOW_UNCOLLECTABLE",
+        "ANALYSIS_TARGET_CONVERSATIONS_NOT_FOUND"
+      ]
+    },
+    "collection_summary": { "$ref": "#/$defs/collection_summary" },
+    "conversations": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/conversation" }
+    }
+  },
+  "$defs": {
+    "collection_summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "session_files_scanned",
+        "target_conversations_matched",
+        "records_before_window",
+        "records_in_window",
+        "records_after_window",
+        "skipped_missing_meta",
+        "skipped_outside_target",
+        "skipped_uncollectable"
+      ],
+      "properties": {
+        "session_files_scanned": { "type": "integer", "minimum": 0 },
+        "target_conversations_matched": { "type": "integer", "minimum": 0 },
+        "records_before_window": { "type": "integer", "minimum": 0 },
+        "records_in_window": { "type": "integer", "minimum": 0 },
+        "records_after_window": { "type": "integer", "minimum": 0 },
+        "skipped_missing_meta": { "type": "integer", "minimum": 0 },
+        "skipped_outside_target": { "type": "integer", "minimum": 0 },
+        "skipped_uncollectable": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "conversation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "conversation_id",
+        "project_id",
+        "binding_method",
+        "has_events_before_window",
+        "has_events_after_window",
+        "records"
+      ],
+      "properties": {
+        "conversation_id": { "type": "string", "minLength": 1 },
+        "project_id": { "type": "string", "minLength": 1 },
+        "binding_method": {
+          "enum": [
+            "explicit_conversation_id",
+            "analysis_target_workspace_root"
+          ]
+        },
+        "has_events_before_window": { "type": "boolean" },
+        "has_events_after_window": { "type": "boolean" },
+        "records": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/record" }
+        }
+      }
+    },
+    "record": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "conversation_id",
+        "timestamp",
+        "actor",
+        "sequence",
+        "event_type",
+        "call_id",
+        "source_location",
+        "content_or_reference",
+        "content_hash",
+        "collection_status"
+      ],
+      "properties": {
+        "conversation_id": { "type": "string", "minLength": 1 },
+        "timestamp": { "type": "string", "format": "date-time" },
+        "actor": { "enum": ["user", "assistant", "tool", "system"] },
+        "sequence": { "type": "integer", "minimum": 0 },
+        "event_type": {
+          "enum": [
+            "message",
+            "tool_call",
+            "tool_result",
+            "execution_error",
+            "artifact_reference"
+          ]
+        },
+        "call_id": { "type": ["string", "null"], "minLength": 1 },
+        "source_location": { "type": "string", "minLength": 1 },
+        "content_or_reference": { "type": "string", "minLength": 1 },
+        "content_hash": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
+        "collection_status": { "enum": ["collected", "referenced", "redacted"] }
+      }
+    }
+  }
+}

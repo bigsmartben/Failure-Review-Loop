@@ -8,6 +8,7 @@ from jsonschema import Draft202012Validator, FormatChecker
 
 from .errors import SddFrlError
 from .resources import asset_path
+from .source import EMPTY_REASONS, SUMMARY_FIELDS
 
 
 def schema_errors(kind: str, value: Any) -> list[dict[str, str]]:
@@ -26,6 +27,53 @@ def validate_schema(kind: str, value: Any) -> None:
         raise SddFrlError(
             f"{kind.upper()}_SCHEMA_INVALID",
             json.dumps(errors, ensure_ascii=False),
+        )
+
+
+def validate_source_records(source: dict[str, Any]) -> None:
+    validate_schema("source-records", source)
+    summary = source["collection_summary"]
+    if set(summary) != set(SUMMARY_FIELDS):
+        raise SddFrlError(
+            "SOURCE_RECORDS_SUMMARY_INVALID",
+            "collection_summary 字段与冻结契约不一致。",
+        )
+    record_count = sum(
+        len(conversation["records"])
+        for conversation in source["conversations"]
+    )
+    if summary["records_in_window"] != record_count:
+        raise SddFrlError(
+            "SOURCE_RECORDS_COUNT_MISMATCH",
+            "records_in_window 必须等于 conversations 中的记录总数。",
+        )
+    if summary["target_conversations_matched"] != len(source["conversations"]):
+        raise SddFrlError(
+            "SOURCE_RECORDS_COUNT_MISMATCH",
+            "target_conversations_matched 必须等于 conversations 数量。",
+        )
+    reason = source["empty_reason"]
+    if reason is not None and reason not in EMPTY_REASONS:
+        raise SddFrlError("SOURCE_RECORDS_EMPTY_REASON_INVALID", str(reason))
+    if record_count:
+        if reason is not None:
+            raise SddFrlError(
+                "SOURCE_RECORDS_EMPTY_REASON_INVALID",
+                "窗口内存在记录时 empty_reason 必须为 null。",
+            )
+    elif summary["target_conversations_matched"] == 0:
+        if reason != "ANALYSIS_TARGET_CONVERSATIONS_NOT_FOUND":
+            raise SddFrlError(
+                "SOURCE_RECORDS_EMPTY_REASON_INVALID",
+                "未匹配目标对话时必须使用 ANALYSIS_TARGET_CONVERSATIONS_NOT_FOUND。",
+            )
+    elif reason not in {
+        "NO_EVENTS_IN_WINDOW",
+        "EVENTS_IN_WINDOW_UNCOLLECTABLE",
+    }:
+        raise SddFrlError(
+            "SOURCE_RECORDS_EMPTY_REASON_INVALID",
+            "窗口空结果缺少确定性 empty_reason。",
         )
 
 
