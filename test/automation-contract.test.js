@@ -10,15 +10,14 @@ async function readProjectFile(relativePath) {
   return readFile(path.join(rootDir, relativePath), "utf8");
 }
 
-test("quickstart binds the scheduled task to the runner and requires prompt contents", async () => {
+test("quickstart binds each scheduled task to its target workspace", async () => {
   const quickstart = await readProjectFile("quickstart.md");
+  const prompt = await readProjectFile(path.join("automation", "task-prompt.md"));
 
-  assert.match(quickstart, /运行器项目（runner project）/);
-  assert.match(quickstart, /已安排任务必须绑定到 `Failure-Review-Loop`/);
-  assert.match(quickstart, /不要只填写文件路径/);
-  assert.match(quickstart, /目标 project_id: <配置中的项目 ID>/);
-  assert.match(quickstart, /npm run configure:project/);
-  assert.match(quickstart, /--project-id pre-sdd/);
-  assert.match(quickstart, /--project-root "C:\\Users\\24598\\Documents\\github\\psp"/);
-  assert.match(quickstart, /重复执行是幂等的/);
+  assert.match(quickstart, /sdd-frl init \./);
+  assert.match(quickstart, /sdd-frl run \./);
+  assert.match(quickstart, /docs\/failure-review\/YYYY-MM-DD\.md/);
+  assert.match(quickstart, /任务不能绑定到中央 `Failure-Review-Loop` 运行器/);
+  assert.match(prompt, /只复盘它所绑定的当前工作区/);
+  assert.match(prompt, /所有中间产物、锁和最终文档必须留在当前工作区内/);
 });

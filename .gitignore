@@ -5,3 +5,11 @@ runs/*
 *.log
 .failure-review-locks/
 .env
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+dist/
+.sdd-frl/runs/
+.sdd-frl/locks/
+.sdd-frl/tmp/

@@ -1,94 +1,81 @@
 # Quickstart
 
-已安排任务（Scheduled task）涉及两个不同的项目，不能混用：
+定时任务（Scheduled task）必须绑定到它要复盘的目标项目。每个项目只需初始化一次。
 
-| 角色 | 值 | 用途 |
-|---|---|---|
-| 运行器项目（runner project） | `Failure-Review-Loop` | 任务实际运行的位置；包含 `package.json`、`src/cli.js` 和任务提示词 |
-| 被复盘项目（target project） | `failure-review.config.json` 中的 `project_id` | 需要分析的项目，例如 `pre-sdd`；它不需要包含 Failure Review Loop 的文件 |
+## 1. 安装 CLI
 
-已安排任务必须绑定到 `Failure-Review-Loop`。不要把任务绑定到被复盘项目，也不要让任务在被复盘项目中读取 `automation/task-prompt.md`。
-
-## 1. 首次准备
-
-在 `Failure-Review-Loop` 仓库根目录运行：
+本机 `uv` 命令使用单数 `tool`：
 
 ```powershell
-npm run init:product
+uv tool install "sdd-frl @ git+ssh://git@github.com/bigsmartben/Failure-Review-Loop.git@v0.2.0"
+sdd-frl --version
 ```
 
-它会自动安装依赖、创建安全的仅分析配置并完成全部自检。已有的 `failure-review.config.json` 不会被覆盖。该步骤只初始化运行器，不会猜测你要复盘哪个项目。
+## 2. 初始化目标项目
 
-显式注册被复盘项目。例如，ChatGPT 项目名为 `pre-sdd`、实际目录为 `C:\Users\24598\Documents\github\psp`：
+进入目标项目根目录，例如 `C:\Users\24598\Documents\github\psp`：
 
 ```powershell
-npm run configure:project -- `
-  --project-id pre-sdd `
-  --project-root "C:\Users\24598\Documents\github\psp"
+Set-Location C:\Users\24598\Documents\github\psp
+sdd-frl init .
 ```
 
-该命令会以仅分析模式把绑定追加到 `failure-review.config.json`，并在目标根目录安全创建 `failure-review.project.json`。重复执行是幂等的，不会重复添加；目录或标记已属于其他项目时会拒绝修改。
+初始化会创建：
 
-复制任务提示词全文：
+```text
+psp/
+├─ failure-review.project.json
+├─ .sdd-frl/
+│  ├─ config.json
+│  ├─ automation/task-prompt.md
+│  ├─ runs/
+│  └─ locks/
+└─ docs/failure-review/
+```
+
+重复执行 `sdd-frl init .` 是幂等操作，不覆盖有效配置。
+
+## 3. 先手工验证
 
 ```powershell
-Get-Content -Raw .\automation\task-prompt.md | Set-Clipboard
+sdd-frl probe .
+sdd-frl run . --date 2026-07-26
 ```
 
-## 2. 创建已安排任务
+省略 `--date` 时，CLI 使用 `.sdd-frl/config.json` 中的时区复盘最近一个完整自然日。
 
-选择下列一种方式。
+最终文档示例：
 
-### 方式一：直接新建
+```text
+docs/failure-review/2026-07-26.md
+```
 
-在 ChatGPT 中打开“已安排任务”，点击“新建”，填写：
+文件格式固定为 `docs/failure-review/YYYY-MM-DD.md`。
+
+原始证据、指标和日志保存在 `.sdd-frl/runs/<run_id>/`。失败重跑不会覆盖已有的成功日期文档。
+
+## 4. 创建定时任务
+
+在 Codex 桌面端创建任务时：
 
 | 字段 | 内容 |
 |---|---|
-| 标题 | `Failure Review Loop 每日复盘` |
-| 描述 | 先填写 `目标 project_id: <配置中的项目 ID>`，再粘贴 [automation/task-prompt.md](automation/task-prompt.md) 的全部内容；不要只填写文件路径 |
-| 运行于 | `新任务` |
-| 项目 | `Failure-Review-Loop` |
-| 模型 | `GPT-5.6 Sol` |
-| 推理 | `最高` |
-| 重复 | 按需选择，例如 `每天` |
-| 时间 | 按需选择，例如 `9:00` |
-| 通知 | `所有运行` |
+| 项目 | 选择当前目标项目，例如 `psp` |
+| 描述 | 粘贴 `.sdd-frl/automation/task-prompt.md` 全文 |
+| 时间 | 按需设置，例如每天 09:00、`Asia/Shanghai` |
 
-确认无误后创建。
-
-### 方式二：在项目对话中设置
-
-打开本地项目 `Failure-Review-Loop`，发送：
-
-```text
-我们一起来设置一个已安排任务吧。首先，说明已安排任务在 ChatGPT 中的工作方式。然后询问我需要安排什么，以及应该在什么时候运行。
-```
-
-被询问时回答：
-
-| 问题 | 示例回答 |
-|---|---|
-| 需要安排什么 | 先填写 `目标 project_id: <配置中的项目 ID>`，再粘贴剪贴板中的任务提示词全文 |
-| 什么时候运行 | `每天 9:00，时区 Asia/Shanghai。` |
-
-创建卡片中必须显示项目为 `Failure-Review-Loop`。如果显示 `pre-sdd` 等被复盘项目，取消创建并切换到运行器项目；不要让助手在被复盘项目中搜索或复制 Failure Review Loop 文件。
-
-## 3. 查看结果
-
-命令会返回 `run_id` 和 `status`。打开报告：
+任务不能绑定到中央 `Failure-Review-Loop` 运行器，也不能写入其他项目。任务实际执行的命令是：
 
 ```powershell
-$runId = "<返回的 run_id>"
-Get-Content "runs\$runId\report.md"
+sdd-frl run .
 ```
 
-| 状态 | 含义 |
-|---|---|
-| `COMPLETED_NO_TASKS` | 时间窗口内没有可分析任务 |
-| `COMPLETED_WITH_METRICS` | 已生成指标 |
-| `COMPLETED_WITH_FINDINGS` | 已生成问题报告，没有可执行提案 |
-| `COMPLETED_WITH_PROPOSAL` | 已生成供人工确认的提案 |
-| `FAILED_*` | 查看 `report.md`、`run.json` 和 `logs/` |
+## 5. 常见失败
 
-本地已安排任务运行时，机器需要开机、ChatGPT 桌面端需要运行，Codex 账户需要保持登录。
+| 错误码 | 含义 |
+|---|---|
+| `WORKSPACE_NOT_INITIALIZED` | 当前项目尚未运行 `sdd-frl init .` |
+| `WORKSPACE_PROJECT_MISMATCH` | 配置、标记或参数的项目 ID 不一致 |
+| `WORKSPACE_PATH_ESCAPE` | 配置尝试把产物写到工作区外 |
+| `OVERLAPPING_RUN` | 同一项目已有活动运行 |
+| `INVALID_REVIEW_DATE` | 日期或时间窗口无效 |

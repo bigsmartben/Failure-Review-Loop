@@ -1,22 +1,11 @@
-# Failure Review Loop 定时任务入口
+# sdd-frl 工作区定时任务
 
-在本地项目 `Failure-Review-Loop` 中运行一次失败复盘。不要并行启动阶段，不要直接修改任何改进载体。
+本任务只复盘它所绑定的当前工作区。不要到 `Failure-Review-Loop` 或其他项目中运行。
 
-1. 根据任务配置确定 `project_id`、带时区的 `[window_start, window_end)` 和 `timezone`。改进载体从配置文件读取，不是运行前提。运行会锁定当前契约身份；契约变化后必须开始新运行。
-2. 先运行 `npm run probe`；能力探测失败时停止并报告。
-3. 调用：
+1. 确认当前目录存在 `.sdd-frl/config.json` 与 `failure-review.project.json`。
+2. 执行 `sdd-frl run .`。CLI 会使用工作区配置的时区复盘最近一个完整自然日。
+3. 打开命令返回的 `report` 路径并报告状态、目标达成率、执行效能和主要问题。
+4. 失败时报告稳定错误码与 `.sdd-frl/runs/<run_id>/report.md`；不得把失败或空结果称为成功。
+5. Optimizer 只生成提案，不应用、提交、发布或部署修改。
 
-```powershell
-node src/cli.js run --config failure-review.config.json --project-id <project_id> --window-start <ISO> --window-end <ISO> --timezone <IANA timezone>
-```
-
-4. 打开命令返回的 `runs/<run_id>/report.md` 并向用户报告结果。
-5. 若状态为 `FAILED_*`，报告失败阶段、错误码和日志路径；不得把空结果称为成功。
-6. 若状态为 `COMPLETED_NO_TASKS`，明确写“本周期没有可分析任务”。
-7. 若状态为 `COMPLETED_WITH_METRICS`，报告达成率、结果覆盖率、效能指标和趋势，不把无提案称为失败。
-8. 若状态为 `COMPLETED_WITH_FINDINGS`，报告高频问题及未生成提案的具体原因。
-9. 若状态为 `COMPLETED_WITH_PROPOSAL`，只展示提案供人工确认；不要应用提案、提交或发布。
-
-报告趋势时必须说明它是观察结果，不代表载体修改与结果变化存在确定因果关系。
-
-每次运行必须从保存的任务参数重新计算时间窗口，不能复用上一轮窗口。重试同一次运行时使用原 `run_id` 和完全相同的范围参数。
+所有中间产物、锁和最终文档必须留在当前工作区内。

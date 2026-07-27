@@ -2,6 +2,22 @@
 
 按项目和时间窗口复盘 Codex 对话，衡量执行效能（efficiency）与用户目标达成率（attainment rate），并从至少三个独立任务重复出现的具体问题中生成改进提案。
 
+## 推荐入口：sdd-frl
+
+`sdd-frl` 是原生 Python CLI，通过 uv 的隔离工具环境安装；运行时不依赖 Node/npm。
+
+```powershell
+uv tool install "sdd-frl @ git+ssh://git@github.com/bigsmartben/Failure-Review-Loop.git@v0.2.0"
+sdd-frl init .
+sdd-frl run .
+```
+
+每个项目独立初始化。中间产物写入 `.sdd-frl/runs/<run_id>/`，最终文档按复盘日期写入
+`docs/failure-review/YYYY-MM-DD.md`。同日重跑保留原始运行记录，并更新同一份最终文档。
+
+完整安装、目录和失败语义见 [docs/uv-cli.md](docs/uv-cli.md)，定时任务设置见
+[quickstart.md](quickstart.md)。
+
 本项目采用契约优先（Contract-first）：领域契约先定义业务语义，Schema 定义结构，
 Validator 执行跨产物规则，Prompt 和实现只能服从契约。权威顺序见
 `docs/contracts/precedence.md`。
@@ -45,7 +61,9 @@ Analyst ────────▶ findings.json
 interaction event（证据关联交互事件），计数再由 Validator 推导。条件验收使用结构化
 acceptance criteria（验收条件），不能只靠自由文本声称成功。
 
-## 环境
+## 兼容保留的 Node 开发入口
+
+下列 Node 命令仅用于现有实现的回归兼容；新项目使用上面的 `sdd-frl` 工作区入口。
 
 - Node.js 20 或更高版本
 - Codex CLI；本机验证版本为 `0.145.0`
@@ -58,7 +76,7 @@ npm run validate:examples
 npm run probe
 ```
 
-## 配置
+## 旧版集中式配置（兼容保留）
 
 复制 `failure-review.config.example.json` 为 `failure-review.config.json`，然后设置：
 
@@ -91,7 +109,7 @@ npm run probe
 
 多项目配置必须为每个项目绑定目标 ID，防止读取其他项目的改进载体。单项目旧配置仍兼容 `target_skill_allowlist`。
 
-## 运行
+## 旧版集中式运行（兼容保留）
 
 时间窗口采用半开区间 `[window_start, window_end)`：
 

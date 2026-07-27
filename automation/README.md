@@ -1,31 +1,34 @@
 # 定时任务配置
 
-Codex CLI 0.145.0 没有 Scheduled（定时任务）的创建或管理接口。首版采用官方支持的方式：
+## 工作区模型
 
-1. 运行 `npm run init:product`，创建不含敏感信息的仅分析配置。
-2. 运行 `npm run configure:project -- --project-id <ID> --project-root <路径>`，显式注册被复盘项目。
-3. 如需优化提案，再为该绑定配置 `improvement_target_ids`；仅分析时保持空数组。
-4. 在普通会话中先手工执行一次 `node src/cli.js run ...`。
-5. 在 ChatGPT 桌面端的 **Scheduled** 中创建任务，将项目固定为运行器项目 `Failure-Review-Loop`。
-6. 在任务描述中先保存 `目标 project_id: <已注册的项目 ID>`，再粘贴 `automation/task-prompt.md` 的全文；不要只填写相对路径。
-7. 被复盘项目不需要包含 `automation/task-prompt.md`、CLI 或其他 Failure Review Loop 文件。
-8. 选择本地项目模式，确保机器在触发时开机且桌面端运行。
-9. 设置时区和 RRULE；首次运行后核对 `run.json` 的窗口与时区。
-10. 首次运行后抽查 `findings.json` 的任务覆盖、显式排除、结构化验收条件和交互事件。
-
-项目注册命令的失败语义：
-
-| 错误码 | 含义 |
-|---|---|
-| `CONFIG_NOT_INITIALIZED` | 尚未运行 `npm run init:product` |
-| `PROJECT_ROOT_NOT_FOUND` | 目标目录不存在 |
-| `PROJECT_ROOT_CONFLICT` | 同一目录已绑定到其他 `project_id` |
-| `PROJECT_MARKER_CONFLICT` | 目标目录的标记声明了其他 `project_id` |
-
-计划没有确定触发时间，因此仓库不擅自写死 RRULE。示例（每天 20:00）：
+每个定时任务绑定一个目标项目，并在该项目根目录执行 `sdd-frl run .`。
 
 ```text
-RRULE:FREQ=DAILY;BYHOUR=20;BYMINUTE=0
+项目 A 的定时任务 ──▶ 项目 A/.sdd-frl + 项目 A/docs/failure-review
+项目 B 的定时任务 ──▶ 项目 B/.sdd-frl + 项目 B/docs/failure-review
 ```
 
-该示例不是已激活的生产配置。
+项目之间没有共享运行目录，也不再依赖中央 `Failure-Review-Loop` 运行器。
+
+## 创建步骤
+
+1. 安装 `sdd-frl`。
+2. 在目标项目运行 `sdd-frl init .`。
+3. 手工运行一次 `sdd-frl probe .` 和 `sdd-frl run . --date YYYY-MM-DD`。
+4. 在 Codex 桌面端创建定时任务，把项目设为该目标项目。
+5. 将 `.sdd-frl/automation/task-prompt.md` 全文粘贴到任务描述。
+6. 设置周期、时区和通知。
+
+CLI 默认复盘配置时区内最近一个完整自然日，因此每天运行一次时无需由模型计算窗口。
+
+## 写入边界
+
+| 内容 | 位置 |
+|---|---|
+| 配置和任务提示词 | `.sdd-frl/` |
+| 原始证据、指标和日志 | `.sdd-frl/runs/<run_id>/` |
+| 活动锁 | `.sdd-frl/locks/` |
+| 最终文档 | `docs/failure-review/YYYY-MM-DD.md` |
+
+允许从 Codex 全局会话目录只读采集；所有写操作必须留在目标工作区。
