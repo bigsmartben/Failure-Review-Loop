@@ -7,7 +7,7 @@
 复制到 PowerShell 执行：
 
 ```powershell
-uv tool install "sdd-frl @ git+ssh://git@github.com/bigsmartben/Failure-Review-Loop.git@v0.4.0"
+uv tool install "sdd-frl @ git+ssh://git@github.com/bigsmartben/Failure-Review-Loop.git@v0.4.1"
 ```
 
 ## 2. 初始化
