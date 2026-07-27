@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "sdd-frl"
-version = "0.2.0"
+version = "0.2.1"
 description = "Workspace-local, evidence-backed failure review loop for Codex sessions"
 readme = "README.md"
 requires-python = ">=3.11"

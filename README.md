@@ -7,7 +7,7 @@
 `sdd-frl` 是原生 Python CLI，通过 uv 的隔离工具环境安装；运行时不依赖 Node/npm。
 
 ```powershell
-uv tool install "sdd-frl @ git+ssh://git@github.com/bigsmartben/Failure-Review-Loop.git@v0.2.0"
+uv tool install "sdd-frl @ git+ssh://git@github.com/bigsmartben/Failure-Review-Loop.git@v0.2.1"
 sdd-frl init .
 sdd-frl run .
 ```

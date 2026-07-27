@@ -33,7 +33,7 @@ DEFAULT_MODELS = {
 
 TASK_PROMPT = """# sdd-frl 工作区定时任务
 
-本任务只复盘它所绑定的当前工作区。不要到 Failure-Review-Loop 或其他项目中运行。
+本任务只复盘它所绑定的当前工作区。不要切换到其他项目或工作区运行。
 
 1. 确认当前目录存在 `.sdd-frl/config.json` 与 `failure-review.project.json`。
 2. 执行 `sdd-frl run .`。CLI 会使用工作区配置的时区复盘最近一个完整自然日。
