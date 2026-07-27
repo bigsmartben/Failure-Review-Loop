@@ -6,7 +6,12 @@ from pathlib import Path
 import pytest
 
 from sdd_frl.errors import SddFrlError
-from sdd_frl.workspace import init_workspace, load_workspace
+from sdd_frl.workspace import (
+    _legacy_quickstart,
+    _legacy_workspace_readme,
+    init_workspace,
+    load_workspace,
+)
 
 
 def test_init_creates_workspace_contract_and_is_idempotent(tmp_path: Path) -> None:
@@ -23,13 +28,29 @@ def test_init_creates_workspace_contract_and_is_idempotent(tmp_path: Path) -> No
         "project_id"
     ] == "my-product"
     assert (project / ".sdd-frl/config.json").is_file()
-    assert (project / ".sdd-frl/README.md").is_file()
-    assert (project / ".sdd-frl/quickstart.md").is_file()
+    config = json.loads((project / ".sdd-frl/config.json").read_text("utf-8"))
+    assert config["models"]["optimizer"] == {
+        "planned_name": "Sol",
+        "model": "gpt-5.6-sol",
+        "reasoning_effort": "medium",
+    }
+    assert (project / "README.md").is_file()
+    assert (project / "quickstart.md").is_file()
+    assert not (project / ".sdd-frl/README.md").exists()
+    assert not (project / ".sdd-frl/quickstart.md").exists()
     assert (project / ".sdd-frl/automation/task-prompt.md").is_file()
-    quickstart = (project / ".sdd-frl/quickstart.md").read_text("utf-8")
-    assert "uv tool install" in quickstart
-    assert "sdd-frl init ." in quickstart
-    assert "## 4." not in quickstart
+    readme = (project / "README.md").read_text("utf-8")
+    assert "维护者（maintainer）" in readme
+    assert "sdd-frl probe ." in readme
+    assert "Asia/Shanghai" in readme
+    assert "请读取当前项目的 `.sdd-frl/automation/task-prompt.md`" not in readme
+    quickstart = (project / "quickstart.md").read_text("utf-8")
+    assert "使用者第三步" in quickstart
+    assert "复制、粘贴、发送" in quickstart
+    assert "请读取当前项目的 `.sdd-frl/automation/task-prompt.md`" in quickstart
+    assert "sdd-frl probe ." not in quickstart
+    assert ".sdd-frl/runs/<run_id>/" not in quickstart
+    assert quickstart.count("```text") == 1
     prompt = (project / ".sdd-frl/automation/task-prompt.md").read_text("utf-8")
     assert str(project.resolve()) in prompt
     assert "sdd-frl · my-product" in prompt
@@ -40,6 +61,47 @@ def test_init_creates_workspace_contract_and_is_idempotent(tmp_path: Path) -> No
     ignore = (project / ".gitignore").read_text("utf-8")
     assert ".sdd-frl/runs/" in ignore
     assert load_workspace(project).project_id == "my-product"
+
+
+def test_init_moves_known_generated_guides_to_project_root(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    project.mkdir()
+    (project / ".sdd-frl").mkdir()
+    (project / ".sdd-frl/README.md").write_text(
+        _legacy_workspace_readme("project"),
+        encoding="utf-8",
+    )
+    (project / ".sdd-frl/quickstart.md").write_text(
+        _legacy_quickstart(),
+        encoding="utf-8",
+    )
+
+    result = init_workspace(project, timezone_name="Asia/Shanghai")
+
+    assert (project / "README.md").is_file()
+    assert (project / "quickstart.md").is_file()
+    assert not (project / ".sdd-frl/README.md").exists()
+    assert not (project / ".sdd-frl/quickstart.md").exists()
+    assert result["removed"] == [
+        ".sdd-frl/README.md",
+        ".sdd-frl/quickstart.md",
+    ]
+
+
+def test_init_preserves_existing_root_guides(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    project.mkdir()
+    (project / "README.md").write_text("product readme", encoding="utf-8")
+    (project / "quickstart.md").write_text("product quickstart", encoding="utf-8")
+
+    result = init_workspace(project, timezone_name="Asia/Shanghai")
+
+    assert (project / "README.md").read_text("utf-8") == "product readme"
+    assert (project / "quickstart.md").read_text("utf-8") == "product quickstart"
+    assert result["warnings"] == [
+        "根目录 README.md 已存在，已保留且未覆盖。",
+        "根目录 quickstart.md 已存在，已保留且未覆盖。",
+    ]
 
 
 def test_init_upgrades_the_legacy_generated_prompt(tmp_path: Path) -> None:

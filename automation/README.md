@@ -17,9 +17,10 @@
 
 1. 使用 `uv tool install` 从 Git 标签安装 `sdd-frl`。
 2. 在目标项目运行 `sdd-frl init .`。
-3. 打开生成的 `.sdd-frl/automation/task-prompt.md`，复制全文并在 Codex App 当前项目的对话中发送。
+3. 打开根目录 `quickstart.md`，复制唯一代码框，粘贴到 Codex App 当前项目的对话并发送。
 
-用户不需要手工执行 `probe`、`run`，也不需要自己设置周期、时区或任务描述。
+代码框只要求 Codex 读取 `.sdd-frl/automation/task-prompt.md` 并创建任务。用户不需要
+打开隐藏文件，也不需要手工执行 `probe`、`run` 或设置周期、时区和任务描述。
 生成的提示词包含目标工作区绝对路径、项目 ID、配置时区和每天 09:00 的频率。
 定时任务内部执行 `sdd-frl run .`，默认复盘配置时区内最近一个完整自然日。
 

@@ -14,7 +14,7 @@ uv tool install "sdd-frl @ git+ssh://git@github.com/bigsmartben/Failure-Review-L
 
 | 命令 | 输入 | 输出 |
 |---|---|---|
-| `sdd-frl init [PATH]` | 目标工作区；可选项目 ID 与 IANA 时区 | 工作区配置、标记、README、三步指南、Codex App 设置提示词和产物目录 |
+| `sdd-frl init [PATH]` | 目标工作区；可选项目 ID 与 IANA 时区 | 根目录 README、复制粘贴指南、工作区配置、Codex App 设置提示词和产物目录 |
 | `sdd-frl run [PATH]` | 工作区；可选日期或显式时间窗口 | JSON 运行摘要及日期 Markdown |
 | `sdd-frl probe [PATH]` | 已初始化工作区 | Codex CLI 能力与项目身份 |
 | `sdd-frl validate` | 产物种类和 JSON 文件 | Schema 校验结果 |
@@ -37,7 +37,9 @@ uv tool install "sdd-frl @ git+ssh://git@github.com/bigsmartben/Failure-Review-L
 - `PATH` 本身就是工作区根目录；`init` 不暗中切换到父级。
 - 项目 ID 优先采用已有 `failure-review.project.json`，否则使用 `--project-id`，最后才由目录名生成。
 - 已有标记、配置与参数冲突时返回 `INIT_CONFLICT`，不覆盖。
-- `.sdd-frl/README.md` 与 `.sdd-frl/quickstart.md` 仅在缺失时创建，不覆盖项目文档。
+- `README.md` 与 `quickstart.md` 生成在项目根目录；前者面向维护者，后者面向首次使用者。
+- 已有同名项目文档会保留，不覆盖。
+- 旧版自动生成的 `.sdd-frl/README.md` 与 `.sdd-frl/quickstart.md` 只有在内容与旧模板完全一致时才删除；自定义内容保留。
 - 生成的 `.sdd-frl/automation/task-prompt.md` 可随模板升级；用户自定义提示词不会被覆盖。
 - 旧版 `failure-review.config.json` 只导入与当前根目录精确匹配的项目配置；工作区外载体不会导入。
 

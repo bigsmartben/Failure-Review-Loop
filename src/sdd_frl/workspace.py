@@ -18,8 +18,10 @@ PROJECT_ID_PATTERN = re.compile(r"^[a-z0-9][a-z0-9-]{0,62}$")
 MARKER_NAME = "failure-review.project.json"
 CONFIG_RELATIVE = Path(".sdd-frl/config.json")
 TASK_PROMPT_RELATIVE = Path(".sdd-frl/automation/task-prompt.md")
-README_RELATIVE = Path(".sdd-frl/README.md")
-QUICKSTART_RELATIVE = Path(".sdd-frl/quickstart.md")
+README_RELATIVE = Path("README.md")
+QUICKSTART_RELATIVE = Path("quickstart.md")
+LEGACY_README_RELATIVE = Path(".sdd-frl/README.md")
+LEGACY_QUICKSTART_RELATIVE = Path(".sdd-frl/quickstart.md")
 
 DEFAULT_MODELS = {
     "analyst": {
@@ -30,7 +32,7 @@ DEFAULT_MODELS = {
     "optimizer": {
         "planned_name": "Sol",
         "model": "gpt-5.6-sol",
-        "reasoning_effort": "xhigh",
+        "reasoning_effort": "medium",
     },
 }
 
@@ -48,6 +50,8 @@ LEGACY_TASK_PROMPT = """# sdd-frl 工作区定时任务
 """
 
 GENERATED_PROMPT_HEADER = "<!-- sdd-frl-generated: codex-automation-setup-v1 -->"
+GENERATED_README_HEADER = "<!-- sdd-frl-generated: workspace-readme-v2 -->"
+GENERATED_QUICKSTART_HEADER = "<!-- sdd-frl-generated: quickstart-v2 -->"
 
 
 def _task_prompt(root: Path, project_id: str, timezone_name: str) -> str:
@@ -75,7 +79,61 @@ def _task_prompt(root: Path, project_id: str, timezone_name: str) -> str:
 """
 
 
-def _workspace_readme(project_id: str) -> str:
+def _workspace_readme(project_id: str, timezone_name: str) -> str:
+    return f"""{GENERATED_README_HEADER}
+# Failure Review Loop 维护说明
+
+本文供维护者（maintainer）检查和维护项目 `{project_id}` 的自动复盘。
+首次设置请让使用者直接打开 [quickstart.md](quickstart.md)。
+
+## 运行契约
+
+| 项目 | 固定值 |
+|---|---|
+| 定时任务 | `sdd-frl · {project_id}` |
+| 执行时间 | 每天 09:00（`{timezone_name}`） |
+| 执行命令 | `sdd-frl run .` |
+| 复盘范围 | 最近一个完整自然日 |
+| 最终报告 | `docs/failure-review/YYYY-MM-DD.md` |
+
+## 维护检查
+
+```powershell
+sdd-frl probe .
+```
+
+该命令应返回当前工作区、项目 ID、时区和 Codex CLI 能力。
+
+## 文件职责
+
+| 路径 | 用途 |
+|---|---|
+| `.sdd-frl/config.json` | 项目、时区和输出位置 |
+| `.sdd-frl/automation/task-prompt.md` | 创建定时任务的权威提示词 |
+| `.sdd-frl/runs/` | 每次复盘的证据、指标和日志 |
+| `docs/failure-review/` | 给人阅读的最终报告 |
+
+运行失败时查看命令返回的错误码和 `.sdd-frl/runs/<run_id>/report.md`。
+失败结果不会覆盖同一天已有的成功报告。
+"""
+
+
+def _quickstart() -> str:
+    return f"""{GENERATED_QUICKSTART_HEADER}
+# 使用者第三步：复制、粘贴、发送
+
+复制下面代码框里的整句话，粘贴到**当前项目**的 Codex 对话，然后发送。
+
+```text
+请读取当前项目的 `.sdd-frl/automation/task-prompt.md`，并严格按照文件内容创建定时任务。
+```
+
+Codex 回复任务名称、工作区、频率、时区和“已启用”，就完成了。
+如果 Codex 返回 `SETUP_BLOCKED`，把原因交给维护者处理。
+"""
+
+
+def _legacy_workspace_readme(project_id: str) -> str:
     return f"""# sdd-frl
 
 此目录属于项目 `{project_id}` 的 Failure Review Loop，不是项目源码目录。
@@ -89,7 +147,7 @@ def _workspace_readme(project_id: str) -> str:
 """
 
 
-def _quickstart() -> str:
+def _legacy_quickstart() -> str:
     return f"""# 三步完成 sdd-frl 设置
 
 ## 1. 安装
@@ -303,6 +361,51 @@ def _update_gitignore(root: Path) -> bool:
     return True
 
 
+def _ensure_generated_guide(
+    *,
+    file: Path,
+    content: str,
+    generated_header: str,
+    root: Path,
+    created: list[str],
+    warnings: list[str],
+) -> bool:
+    relative = relative_posix(file, root)
+    if not file.exists():
+        write_text_atomic(file, content)
+        created.append(relative)
+        return True
+
+    existing = file.read_text(encoding="utf-8")
+    if existing == content:
+        return True
+    if existing.startswith(generated_header):
+        write_text_atomic(file, content)
+        created.append(f"{relative} (updated)")
+        return True
+
+    warnings.append(f"根目录 {relative} 已存在，已保留且未覆盖。")
+    return False
+
+
+def _remove_legacy_generated_guide(
+    *,
+    file: Path,
+    legacy_content: str,
+    root: Path,
+    removed: list[str],
+    warnings: list[str],
+) -> None:
+    if not file.exists():
+        return
+    relative = relative_posix(file, root)
+    if file.read_text(encoding="utf-8") != legacy_content:
+        warnings.append(f"现有 {relative} 不是旧版生成内容，已保留且未删除。")
+        return
+    file.unlink()
+    removed.append(relative)
+
+
 def init_workspace(
     path: str | Path,
     *,
@@ -326,6 +429,7 @@ def init_workspace(
     timezone_value = detect_timezone(timezone_name)
     config_file = root / CONFIG_RELATIVE
     created: list[str] = []
+    removed: list[str] = []
     warnings: list[str] = []
 
     if config_file.exists():
@@ -349,15 +453,39 @@ def init_workspace(
         )
         created.append(MARKER_NAME)
 
-    readme = root / README_RELATIVE
-    if not readme.exists():
-        write_text_atomic(readme, _workspace_readme(resolved_project))
-        created.append(relative_posix(readme, root))
+    readme_managed = _ensure_generated_guide(
+        file=root / README_RELATIVE,
+        content=_workspace_readme(resolved_project, config["timezone"]),
+        generated_header=GENERATED_README_HEADER,
+        root=root,
+        created=created,
+        warnings=warnings,
+    )
+    if readme_managed:
+        _remove_legacy_generated_guide(
+            file=root / LEGACY_README_RELATIVE,
+            legacy_content=_legacy_workspace_readme(resolved_project),
+            root=root,
+            removed=removed,
+            warnings=warnings,
+        )
 
-    quickstart = root / QUICKSTART_RELATIVE
-    if not quickstart.exists():
-        write_text_atomic(quickstart, _quickstart())
-        created.append(relative_posix(quickstart, root))
+    quickstart_managed = _ensure_generated_guide(
+        file=root / QUICKSTART_RELATIVE,
+        content=_quickstart(),
+        generated_header=GENERATED_QUICKSTART_HEADER,
+        root=root,
+        created=created,
+        warnings=warnings,
+    )
+    if quickstart_managed:
+        _remove_legacy_generated_guide(
+            file=root / LEGACY_QUICKSTART_RELATIVE,
+            legacy_content=_legacy_quickstart(),
+            root=root,
+            removed=removed,
+            warnings=warnings,
+        )
 
     task_prompt = root / TASK_PROMPT_RELATIVE
     expected_prompt = _task_prompt(root, resolved_project, config["timezone"])
@@ -387,11 +515,12 @@ def init_workspace(
         created.append(".gitignore (updated)")
 
     return {
-        "status": "initialized" if created else "already_initialized",
+        "status": "initialized" if created or removed else "already_initialized",
         "workspace": str(root),
         "project_id": resolved_project,
         "timezone": config["timezone"],
         "created": created,
+        "removed": removed,
         "warnings": warnings,
     }
 

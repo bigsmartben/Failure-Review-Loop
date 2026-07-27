@@ -23,7 +23,7 @@
 |---|---|---|
 | Collector | `gpt-5.6-terra` | `low` |
 | Analyst | `gpt-5.6-sol` | `high` |
-| Optimizer | `gpt-5.6-sol` | `xhigh` |
+| Optimizer | `gpt-5.6-sol` | `medium` |
 
 Metrics 与 Trend 不调用模型。
 
