@@ -1,0 +1,42 @@
+{
+  "schema_version": "1.0.0",
+  "contract_revision": "2026-07-24.contract-first.1",
+  "contract_bundle_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+  "run_id": "20260724T140000Z_failure-review-loop_a1b2c3",
+  "project_id": "failure-review-loop",
+  "generated_at": "2026-07-24T14:00:00Z",
+  "target_scope": {
+    "improvement_target_ids": ["example-skill"],
+    "target_set_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+    "contract_revision": "2026-07-24.contract-first.1",
+    "contract_bundle_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+  },
+  "task_counts": {
+    "total": 3,
+    "complete": 3,
+    "truncated": 0,
+    "achieved": 2,
+    "not_achieved": 1,
+    "unknown": 0,
+    "known_outcome": 3
+  },
+  "attainment_rate": 0.666667,
+  "outcome_coverage": 1,
+  "efficiency": {
+    "turn_count": { "sample_count": 3, "total": 9, "average": 3, "median": 3, "values": [2, 3, 4] },
+    "clarification_count": { "sample_count": 3, "total": 1, "average": 0.333333, "median": 0, "values": [0, 0, 1] },
+    "repeated_clarification_count": { "sample_count": 3, "total": 0, "average": 0, "median": 0, "values": [0, 0, 0] },
+    "execution_attempt_count": { "sample_count": 3, "total": 4, "average": 1.333333, "median": 1, "values": [1, 1, 2] },
+    "rework_count": { "sample_count": 3, "total": 1, "average": 0.333333, "median": 0, "values": [0, 0, 1] }
+  },
+  "pattern_task_counts": {
+    "repeated_clarification": 0,
+    "repeated_execution": 1,
+    "unmet_expectation": 1
+  },
+  "pattern_rates": {
+    "repeated_clarification": 0,
+    "repeated_execution": 0.333333,
+    "unmet_expectation": 0.333333
+  }
+}

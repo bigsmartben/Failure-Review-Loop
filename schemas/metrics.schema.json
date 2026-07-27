@@ -1,0 +1,99 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://failure-review-loop.local/schemas/metrics.schema.json",
+  "title": "Deterministic Outcome And Efficiency Metrics",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "contract_revision", "contract_bundle_hash", "run_id", "project_id", "generated_at", "target_scope", "task_counts", "attainment_rate", "outcome_coverage", "efficiency", "pattern_task_counts", "pattern_rates"],
+  "properties": {
+    "schema_version": { "const": "1.0.0" },
+    "contract_revision": { "const": "2026-07-24.contract-first.1" },
+    "contract_bundle_hash": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
+    "run_id": { "type": "string", "minLength": 1 },
+    "project_id": { "type": "string", "minLength": 1 },
+    "generated_at": { "type": "string", "format": "date-time" },
+    "target_scope": { "$ref": "#/$defs/target_scope" },
+    "task_counts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["total", "complete", "truncated", "achieved", "not_achieved", "unknown", "known_outcome"],
+      "properties": {
+        "total": { "type": "integer", "minimum": 0 },
+        "complete": { "type": "integer", "minimum": 0 },
+        "truncated": { "type": "integer", "minimum": 0 },
+        "achieved": { "type": "integer", "minimum": 0 },
+        "not_achieved": { "type": "integer", "minimum": 0 },
+        "unknown": { "type": "integer", "minimum": 0 },
+        "known_outcome": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "attainment_rate": { "type": ["number", "null"], "minimum": 0, "maximum": 1 },
+    "outcome_coverage": { "type": ["number", "null"], "minimum": 0, "maximum": 1 },
+    "efficiency": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["turn_count", "clarification_count", "repeated_clarification_count", "execution_attempt_count", "rework_count"],
+      "properties": {
+        "turn_count": { "$ref": "#/$defs/distribution" },
+        "clarification_count": { "$ref": "#/$defs/distribution" },
+        "repeated_clarification_count": { "$ref": "#/$defs/distribution" },
+        "execution_attempt_count": { "$ref": "#/$defs/distribution" },
+        "rework_count": { "$ref": "#/$defs/distribution" }
+      }
+    },
+    "pattern_task_counts": { "$ref": "#/$defs/pattern_values_integer" },
+    "pattern_rates": { "$ref": "#/$defs/pattern_values_number" }
+  },
+  "$defs": {
+    "target_scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["improvement_target_ids", "target_set_hash", "contract_revision", "contract_bundle_hash"],
+      "properties": {
+        "improvement_target_ids": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "type": "string", "pattern": "^[a-z0-9][a-z0-9_-]{0,62}$" }
+        },
+        "target_set_hash": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" }
+        ,"contract_revision": { "const": "2026-07-24.contract-first.1" }
+        ,"contract_bundle_hash": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" }
+      }
+    },
+    "distribution": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sample_count", "total", "average", "median", "values"],
+      "properties": {
+        "sample_count": { "type": "integer", "minimum": 0 },
+        "total": { "type": "integer", "minimum": 0 },
+        "average": { "type": ["number", "null"], "minimum": 0 },
+        "median": { "type": ["number", "null"], "minimum": 0 },
+        "values": {
+          "type": "array",
+          "items": { "type": "integer", "minimum": 0 }
+        }
+      }
+    },
+    "pattern_values_integer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["repeated_clarification", "repeated_execution", "unmet_expectation"],
+      "properties": {
+        "repeated_clarification": { "type": "integer", "minimum": 0 },
+        "repeated_execution": { "type": "integer", "minimum": 0 },
+        "unmet_expectation": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "pattern_values_number": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["repeated_clarification", "repeated_execution", "unmet_expectation"],
+      "properties": {
+        "repeated_clarification": { "type": ["number", "null"], "minimum": 0, "maximum": 1 },
+        "repeated_execution": { "type": ["number", "null"], "minimum": 0, "maximum": 1 },
+        "unmet_expectation": { "type": ["number", "null"], "minimum": 0, "maximum": 1 }
+      }
+    }
+  }
+}

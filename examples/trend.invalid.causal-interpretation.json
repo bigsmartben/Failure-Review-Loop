@@ -1,0 +1,17 @@
+{
+  "schema_version": "1.0.0",
+  "run_id": "run",
+  "project_id": "project",
+  "generated_at": "2026-07-24T14:00:00Z",
+  "status": "available",
+  "interpretation": "causal",
+  "target_scope": {
+    "improvement_target_ids": [],
+    "target_set_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+  },
+  "baseline_run_ids": [],
+  "current_valid_task_count": 3,
+  "baseline_valid_task_count": 3,
+  "target_change_detected": false,
+  "deltas": {}
+}

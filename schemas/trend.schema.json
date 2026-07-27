@@ -1,0 +1,62 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://failure-review-loop.local/schemas/trend.schema.json",
+  "title": "Observational Metrics Trend",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "contract_revision", "contract_bundle_hash", "run_id", "project_id", "generated_at", "status", "interpretation", "target_scope", "baseline_run_ids", "current_valid_task_count", "baseline_valid_task_count", "target_change_detected", "deltas"],
+  "properties": {
+    "schema_version": { "const": "1.0.0" },
+    "contract_revision": { "const": "2026-07-24.contract-first.1" },
+    "contract_bundle_hash": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
+    "run_id": { "type": "string", "minLength": 1 },
+    "project_id": { "type": "string", "minLength": 1 },
+    "generated_at": { "type": "string", "format": "date-time" },
+    "status": { "enum": ["insufficient_data", "available"] },
+    "interpretation": { "const": "observational_only" },
+    "target_scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["improvement_target_ids", "target_set_hash", "contract_revision", "contract_bundle_hash"],
+      "properties": {
+        "improvement_target_ids": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "type": "string", "pattern": "^[a-z0-9][a-z0-9_-]{0,62}$" }
+        },
+        "target_set_hash": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
+        "contract_revision": { "const": "2026-07-24.contract-first.1" },
+        "contract_bundle_hash": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" }
+      }
+    },
+    "baseline_run_ids": {
+      "type": "array",
+      "maxItems": 7,
+      "uniqueItems": true,
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "current_valid_task_count": { "type": "integer", "minimum": 0 },
+    "baseline_valid_task_count": { "type": "integer", "minimum": 0 },
+    "target_change_detected": { "type": "boolean" },
+    "deltas": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["attainment_rate", "outcome_coverage", "turn_count_median", "clarification_count_median", "repeated_clarification_count_median", "execution_attempt_count_median", "rework_count_median", "repeated_clarification_rate", "repeated_execution_rate", "unmet_expectation_rate"],
+      "properties": {
+        "attainment_rate": { "$ref": "#/$defs/delta" },
+        "outcome_coverage": { "$ref": "#/$defs/delta" },
+        "turn_count_median": { "$ref": "#/$defs/delta" },
+        "clarification_count_median": { "$ref": "#/$defs/delta" },
+        "repeated_clarification_count_median": { "$ref": "#/$defs/delta" },
+        "execution_attempt_count_median": { "$ref": "#/$defs/delta" },
+        "rework_count_median": { "$ref": "#/$defs/delta" },
+        "repeated_clarification_rate": { "$ref": "#/$defs/delta" },
+        "repeated_execution_rate": { "$ref": "#/$defs/delta" },
+        "unmet_expectation_rate": { "$ref": "#/$defs/delta" }
+      }
+    }
+  },
+  "$defs": {
+    "delta": { "type": ["number", "null"] }
+  }
+}

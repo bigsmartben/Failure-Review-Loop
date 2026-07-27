@@ -1,0 +1,15 @@
+{
+  "contract_revision": "2026-07-24.contract-first.1",
+  "signatures": [
+    {
+      "pattern": "repeated_clarification",
+      "issue_signature": "asks_for_already_provided_output_path",
+      "definition": "Assistant asks again for an output path that the user already supplied."
+    },
+    {
+      "pattern": "unmet_expectation",
+      "issue_signature": "result_does_not_match_requested_output",
+      "definition": "The final delivered result is evidenced as not matching the requested output."
+    }
+  ]
+}

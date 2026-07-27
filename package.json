@@ -1,0 +1,24 @@
+{
+  "name": "failure-review-loop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Evidence-backed task outcome, efficiency, and attainment review pipeline for Codex sessions",
+  "type": "module",
+  "bin": {
+    "failure-review": "./src/cli.js"
+  },
+  "scripts": {
+    "init:product": "npm install --no-audit --no-fund && node src/init-product.js",
+    "configure:project": "node src/configure-project.js",
+    "test": "node --test",
+    "validate:examples": "node src/cli.js validate-examples",
+    "probe": "node src/cli.js probe"
+  },
+  "dependencies": {
+    "ajv": "^8.17.1",
+    "ajv-formats": "^3.0.1"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

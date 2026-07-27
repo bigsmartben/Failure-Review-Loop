@@ -1,0 +1,90 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://failure-review-loop.local/schemas/run.schema.json",
+  "title": "Failure Review Run",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "run_id", "attempt", "status", "parameters", "created_at", "updated_at", "stages", "failure"],
+  "properties": {
+    "schema_version": { "type": "string", "const": "1.0.0" },
+    "run_id": { "type": "string", "pattern": "^[0-9]{8}T[0-9]{6}Z_[a-z0-9][a-z0-9-]{0,62}_[a-f0-9]{6}$" },
+    "attempt": { "type": "integer", "minimum": 1 },
+    "status": {
+      "enum": ["PENDING", "COLLECTING", "FAILED_COLLECTION", "VALIDATING_EVIDENCE", "FAILED_EVIDENCE_VALIDATION", "ANALYZING", "FAILED_ANALYSIS", "VALIDATING_FINDINGS", "FAILED_FINDINGS_VALIDATION", "COMPUTING_METRICS", "FAILED_METRICS", "COMPUTING_TREND", "FAILED_TREND", "CHECKING_THRESHOLD", "COMPLETED_NO_TASKS", "COMPLETED_WITH_METRICS", "COMPLETED_WITH_FINDINGS", "OPTIMIZING", "FAILED_OPTIMIZATION", "VALIDATING_PROPOSAL", "FAILED_PROPOSAL_VALIDATION", "COMPLETED_WITH_PROPOSAL"]
+    },
+    "parameters": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["project_id", "window_start", "window_end", "timezone", "contract_revision", "contract_bundle_hash", "improvement_target_ids", "improvement_targets", "target_set_hash"],
+      "properties": {
+        "project_id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]{0,62}$" },
+        "window_start": { "type": "string", "format": "date-time" },
+        "window_end": { "type": "string", "format": "date-time" },
+        "timezone": { "type": "string", "minLength": 1 },
+        "contract_revision": { "const": "2026-07-24.contract-first.1" },
+        "contract_bundle_hash": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
+        "improvement_target_ids": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/target_id" }
+        },
+        "improvement_targets": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/improvement_target" }
+        },
+        "target_set_hash": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" }
+      }
+    },
+    "created_at": { "type": "string", "format": "date-time" },
+    "updated_at": { "type": "string", "format": "date-time" },
+    "stages": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["collector", "analyst", "metrics", "trend", "optimizer"],
+      "properties": {
+        "collector": { "$ref": "#/$defs/stage" },
+        "analyst": { "$ref": "#/$defs/stage" },
+        "metrics": { "$ref": "#/$defs/stage" },
+        "trend": { "$ref": "#/$defs/stage" },
+        "optimizer": { "$ref": "#/$defs/stage" }
+      }
+    },
+    "failure": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "required": ["code", "message", "stage"],
+      "properties": {
+        "code": { "type": "string", "minLength": 1 },
+        "message": { "type": "string", "minLength": 1 },
+        "stage": { "enum": ["collector", "analyst", "metrics", "trend", "optimizer", "orchestrator"] }
+      }
+    }
+  },
+  "$defs": {
+    "target_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9_-]{0,62}$"
+    },
+    "improvement_target": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "type", "path"],
+      "properties": {
+        "id": { "$ref": "#/$defs/target_id" },
+        "type": { "enum": ["skill", "agents", "prompt", "script", "template"] },
+        "path": { "type": "string", "minLength": 1 }
+      }
+    },
+    "stage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "started_at", "completed_at", "artifact"],
+      "properties": {
+        "status": { "enum": ["pending", "running", "succeeded", "failed", "skipped"] },
+        "started_at": { "type": ["string", "null"], "format": "date-time" },
+        "completed_at": { "type": ["string", "null"], "format": "date-time" },
+        "artifact": { "type": ["string", "null"] }
+      }
+    }
+  }
+}

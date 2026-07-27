@@ -1,0 +1,47 @@
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[project]
+name = "sdd-frl"
+version = "0.2.2"
+description = "Workspace-local, evidence-backed failure review loop for Codex sessions"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "Failure Review Loop contributors" }]
+dependencies = [
+  "jsonschema[format]>=4.23,<5",
+  "tzdata>=2025.2; platform_system == 'Windows'",
+  "tzlocal>=5.3,<6",
+]
+
+[project.scripts]
+sdd-frl = "sdd_frl.cli:main"
+
+[project.optional-dependencies]
+dev = ["pytest>=8.3,<9"]
+
+[tool.hatch.build.targets.sdist]
+include = [
+  "src/sdd_frl",
+  "schemas",
+  "prompts",
+  "docs/contracts",
+  "examples",
+  "README.md",
+  "pyproject.toml",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/sdd_frl"]
+
+[tool.hatch.build.targets.wheel.force-include]
+"schemas" = "sdd_frl/assets/schemas"
+"prompts" = "sdd_frl/assets/prompts"
+"docs/contracts" = "sdd_frl/assets/contracts"
+"examples" = "sdd_frl/assets/examples"
+
+[tool.pytest.ini_options]
+testpaths = ["tests_py"]
+addopts = "-q"

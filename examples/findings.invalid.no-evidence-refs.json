@@ -1,0 +1,33 @@
+{
+  "schema_version": "1.0.0",
+  "run_id": "run",
+  "project_id": "project",
+  "task_episodes": [
+    {
+      "task_episode_id": "task_1",
+      "conversation_id": "conversation",
+      "goal": "Create a report",
+      "expected_outcome": "Accepted report",
+      "start_sequence": 0,
+      "end_sequence": 1,
+      "context_status": "complete",
+      "outcome_status": "not_achieved",
+      "outcome_basis": "explicit_user_rejection",
+      "evidence_ids": [],
+      "outcome_evidence_ids": [],
+      "counts": {
+        "turn_count": 2,
+        "clarification_count": 0,
+        "repeated_clarification_count": 0,
+        "execution_attempt_count": 1,
+        "rework_count": 0
+      },
+      "facts": [],
+      "inferences": [],
+      "unknowns": []
+    }
+  ],
+  "problem_instances": [],
+  "issue_clusters": [],
+  "optimizer_eligible_cluster_ids": []
+}

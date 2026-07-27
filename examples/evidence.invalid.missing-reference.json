@@ -1,0 +1,13 @@
+{
+  "schema_version": "1.0.0",
+  "run_id": "run",
+  "project_id": "project",
+  "window_start": "not-a-time",
+  "window_end": "not-a-time",
+  "conversations": [],
+  "records": [
+    {
+      "evidence_id": "wrong-prefix"
+    }
+  ]
+}
