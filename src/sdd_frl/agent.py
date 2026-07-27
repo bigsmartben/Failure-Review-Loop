@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import json
+import shutil
 import subprocess
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -12,6 +14,11 @@ from .resources import asset_path
 
 def _reasoning_config(value: str) -> str:
     return f"model_reasoning_effort={json.dumps(value)}"
+
+
+def _codex_executable() -> str:
+    command = "codex.cmd" if sys.platform == "win32" else "codex"
+    return shutil.which(command) or command
 
 
 def run_codex_stage(
@@ -38,7 +45,7 @@ def run_codex_stage(
     prompt = f"{base_prompt}\n{runtime}\n"
     temporary = output_file.with_name(f".{output_file.name}.agent-output.tmp")
     args = [
-        "codex",
+        _codex_executable(),
         "--ask-for-approval",
         "never",
         "exec",
@@ -73,6 +80,11 @@ def run_codex_stage(
         )
     except FileNotFoundError as exc:
         raise SddFrlError("CODEX_NOT_FOUND", "找不到 codex CLI。") from exc
+    except OSError as exc:
+        raise SddFrlError(
+            "CODEX_EXEC_FAILED",
+            f"无法启动 codex CLI：{exc}",
+        ) from exc
     write_text_atomic(
         log_file,
         "\n".join(filter(None, [
@@ -107,9 +119,10 @@ def run_codex_stage(
 
 
 def probe_codex() -> dict[str, Any]:
+    executable = _codex_executable()
     try:
         version = subprocess.run(
-            ["codex", "--version"],
+            [executable, "--version"],
             text=True,
             encoding="utf-8",
             errors="replace",
@@ -117,7 +130,7 @@ def probe_codex() -> dict[str, Any]:
             check=False,
         )
         help_result = subprocess.run(
-            ["codex", "exec", "--help"],
+            [executable, "exec", "--help"],
             text=True,
             encoding="utf-8",
             errors="replace",
@@ -126,6 +139,11 @@ def probe_codex() -> dict[str, Any]:
         )
     except FileNotFoundError as exc:
         raise SddFrlError("CODEX_NOT_FOUND", "找不到 codex CLI。") from exc
+    except OSError as exc:
+        raise SddFrlError(
+            "CODEX_PROBE_FAILED",
+            f"无法启动 codex CLI：{exc}",
+        ) from exc
     if version.returncode != 0 or help_result.returncode != 0:
         raise SddFrlError("CODEX_PROBE_FAILED", "Codex CLI 能力探测失败。")
     help_text = help_result.stdout
