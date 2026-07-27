@@ -9,24 +9,36 @@ from . import __version__
 from .errors import SddFrlError
 from .pipeline import continue_review, finalize_review, prepare_review, run_review
 from .resources import asset_path
+from .source import probe_source
 from .validation import load_and_validate_file, schema_errors
 from .workspace import init_workspace, load_workspace
 
-KINDS = ("run", "evidence", "findings", "metrics", "trend", "proposal", "handoff")
+KINDS = (
+    "source-records",
+    "run",
+    "evidence",
+    "findings",
+    "metrics",
+    "trend",
+    "proposal",
+    "handoff",
+)
 
 
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="sdd-frl",
-        description="Workspace-local Failure Review Loop",
+        description="Failure Review Loop workspace for a separate Codex analysis target",
     )
     parser.add_argument("--version", action="version", version=f"sdd-frl {__version__}")
     commands = parser.add_subparsers(dest="command")
 
-    init = commands.add_parser("init", help="初始化目标工作区")
+    init = commands.add_parser("init", help="初始化 FRL 工作区并绑定分析目标")
     init.add_argument("path", nargs="?", default=".")
-    init.add_argument("--project-id")
+    init.add_argument("--project-id", help="FRL 工作区项目 ID")
     init.add_argument("--timezone")
+    init.add_argument("--analysis-target", help="要采集 Codex App 对话的目标项目路径")
+    init.add_argument("--analysis-project-id", help="分析目标项目 ID")
 
     for name, help_text in (
         ("prepare", "采集并返回 Codex App 原生子代理 handoff"),
@@ -50,7 +62,7 @@ def _parser() -> argparse.ArgumentParser:
     finalize.add_argument("path", nargs="?", default=".")
     finalize.add_argument("--run-id", required=True)
 
-    probe = commands.add_parser("probe", help="检查工作区与 Codex CLI 能力")
+    probe = commands.add_parser("probe", help="检查工作区、session 数据源与目标绑定")
     probe.add_argument("path", nargs="?", default=".")
 
     validate = commands.add_parser("validate", help="按 JSON Schema 校验产物")
@@ -95,6 +107,8 @@ def main() -> int:
                 args.path,
                 project_id=args.project_id,
                 timezone_name=args.timezone,
+                analysis_target=args.analysis_target,
+                analysis_project_id=args.analysis_project_id,
             ))
             return 0
         if args.command in {"prepare", "run"}:
@@ -127,13 +141,21 @@ def main() -> int:
             from .workspace import inspect_agent_configuration
 
             agents = inspect_agent_configuration(workspace.root)
+            source = probe_source(workspace)
             result = {
-                "ready": True,
+                "ready": not source["blocker_codes"],
                 "runtime_host": "Codex App scheduled task",
                 "workspace": str(workspace.root),
+                "workspace_project_id": workspace.workspace_project_id,
+                "analysis_target": {
+                    "workspace_root": str(workspace.analysis_root),
+                    "project_id": workspace.project_id,
+                },
                 "project_id": workspace.project_id,
                 "timezone": workspace.timezone,
                 "agents": agents,
+                "source": source,
+                "blocker_codes": source["blocker_codes"],
             }
             _print(result)
             return 0

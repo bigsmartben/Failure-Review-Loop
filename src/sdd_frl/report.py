@@ -8,7 +8,7 @@ from .io import utc_now, write_text_atomic
 from .workspace import Workspace
 
 LABELS = {
-    "COMPLETED_NO_TASKS": "本周期没有可分析任务",
+    "COMPLETED_NO_TASKS": "本周期没有形成可分析任务",
     "COMPLETED_WITH_METRICS": "已生成效能与达成率报告",
     "COMPLETED_WITH_FINDINGS": "已生成高频问题报告，未生成可执行提案",
     "COMPLETED_WITH_PROPOSAL": "已生成改进提案",
@@ -39,6 +39,7 @@ def render_report(
     *,
     run: dict[str, Any],
     review_date: str,
+    source: dict[str, Any] | None = None,
     metrics: dict[str, Any] | None = None,
     findings: dict[str, Any] | None = None,
     trend: dict[str, Any] | None = None,
@@ -47,6 +48,12 @@ def render_report(
     status = run["status"]
     failed = status.startswith("FAILED_")
     headline = "运行失败" if failed else LABELS.get(status, status)
+    empty_reason = source.get("empty_reason") if source else None
+    if status == "COMPLETED_NO_TASKS":
+        if empty_reason == "NO_EVENTS_IN_WINDOW":
+            headline = "目标对话存在，但该窗口无可分析事件"
+        elif empty_reason == "EVENTS_IN_WINDOW_UNCOLLECTABLE":
+            headline = "目标窗口有原始事件，但没有可采集记录"
     params = run["parameters"]
     lines = [
         "---",
@@ -63,9 +70,34 @@ def render_report(
         f"- 复盘日期：`{review_date}`",
         f"- 时间窗口：`{params['window_start']}` 至 `{params['window_end']}`",
         f"- 时区：`{params['timezone']}`",
+        "- 窗口口径：半开区间 `[start, end)`；默认选择上一个完整自然日，"
+        "结束时刻及之后（通常为当前日）的数据不进入本次结果。",
         f"- 结果：{headline}",
         "",
     ]
+    if source:
+        summary = source["collection_summary"]
+        lines.extend([
+            "## 采集诊断",
+            "",
+            f"- 来源：`{source['source_kind']}`",
+            f"- 空结果原因：`{source['empty_reason'] or 'NONE'}`",
+            f"- 扫描 session 文件：{summary['session_files_scanned']}",
+            f"- 匹配目标对话：{summary['target_conversations_matched']}",
+            (
+                "- 窗口前 / 窗口内 / 窗口后记录："
+                f"{summary['records_before_window']} / "
+                f"{summary['records_in_window']} / "
+                f"{summary['records_after_window']}"
+            ),
+            (
+                "- 跳过（缺少元数据 / 目标外 / 不可采集）："
+                f"{summary['skipped_missing_meta']} / "
+                f"{summary['skipped_outside_target']} / "
+                f"{summary['skipped_uncollectable']}"
+            ),
+            "",
+        ])
     if failed:
         failure = run.get("failure") or {}
         lines.extend([

@@ -12,5 +12,9 @@
     "content_mode": "redact_secrets",
     "retention_days": null,
     "copy_raw_conversations": false
+  },
+  "analysis_target": {
+    "workspace_root": "C:\\Users\\24598\\Documents\\github\\harness",
+    "project_id": "harness"
   }
 }

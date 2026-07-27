@@ -17,9 +17,10 @@
 | Codex App 宿主 | 完成 | Scheduled Task 负责定时与原生子代理编排 |
 | 原生 Agent | 完成 | 项目级 TOML 固定模型、推理强度和只读边界 |
 | Handoff 状态机 | 完成 | `prepare → continue → finalize`，Schema 与稳定阻塞码 |
+| 采集诊断 | 完成 | `analysis_root` 绑定、显式 ID 覆盖、窗口前后计数、空结果原因与 source probe |
 | 配置迁移 | 完成 | `config.json.models` 一次性迁移至 `.codex/agents/*.toml` |
 
-验证基线：`uv run pytest` 22/22 通过；`npm test` 42/42 通过。
+验证基线：`uv run pytest` 与 `npm test` 必须全部通过；具体数量以当前版本为准。
 
 ## 模型映射
 

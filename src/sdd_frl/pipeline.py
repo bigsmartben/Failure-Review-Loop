@@ -29,6 +29,7 @@ from .validation import (
     validate_metrics,
     validate_proposal,
     validate_schema,
+    validate_source_records,
     validate_trend,
 )
 from .workspace import Workspace, inspect_agent_configuration, load_workspace
@@ -221,8 +222,12 @@ def _normalize_targets(workspace: Workspace) -> tuple[list[dict[str, Any]], dict
             raise SddFrlError("IMPROVEMENT_TARGET_INVALID", f"无效改进载体：{item}")
         candidate = Path(item.get("path", ""))
         if not candidate.is_absolute():
-            candidate = workspace.root / candidate
-        resolved = ensure_within(workspace.root, candidate)
+            candidate = workspace.analysis_root / candidate
+        resolved = ensure_within(
+            workspace.analysis_root,
+            candidate,
+            "ANALYSIS_TARGET_PATH_ESCAPE",
+        )
         key = str(resolved).lower()
         if key in paths or not resolved.is_file():
             raise SddFrlError("IMPROVEMENT_TARGET_INVALID", f"无效改进载体路径：{resolved}")
@@ -484,18 +489,20 @@ def _finalize_artifacts(
         file = run_dir / f"{name}.json"
         if file.exists():
             artifacts[name] = read_json(file)
-    if not raw_report.exists() or not run["status"].startswith("FAILED_"):
-        write_text_atomic(
-            raw_report,
-            render_report(
-                run=run,
-                review_date=review_date,
-                findings=artifacts.get("findings"),
-                metrics=artifacts.get("metrics"),
-                trend=artifacts.get("trend"),
-                proposal=artifacts.get("proposal"),
-            ),
-        )
+    source_file = run_dir / "source-records.json"
+    source = read_json(source_file) if source_file.exists() else None
+    write_text_atomic(
+        raw_report,
+        render_report(
+            run=run,
+            review_date=review_date,
+            source=source,
+            findings=artifacts.get("findings"),
+            metrics=artifacts.get("metrics"),
+            trend=artifacts.get("trend"),
+            proposal=artifacts.get("proposal"),
+        ),
+    )
     report, published = publish_report(
         workspace=workspace,
         raw_report=raw_report,
@@ -639,6 +646,12 @@ def prepare_review(
             _stage_start(run_file, run, "collector", "COLLECTING")
             source = collect_source_packet(workspace, start, end)
             write_json_atomic(run_dir / "source-records.json", source)
+            validate_source_records(source)
+            if source["empty_reason"] == "ANALYSIS_TARGET_CONVERSATIONS_NOT_FOUND":
+                raise SddFrlError(
+                    "ANALYSIS_TARGET_CONVERSATIONS_NOT_FOUND",
+                    "Codex session 数据源可读，但没有对话能绑定当前分析目标。",
+                )
             evidence = build_evidence(
                 source,
                 run_id=run["run_id"],
