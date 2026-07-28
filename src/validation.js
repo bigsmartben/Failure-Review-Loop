@@ -41,6 +41,7 @@ export async function validateArtifact(kind, data, context, rootDir) {
     const expectedContractHash = await contractBundleHash(rootDir);
     validateRun(data, expectedContractHash, errors);
   }
+  if (kind === "source-records") validateSourceRecords(data, errors);
   if (kind === "evidence") validateEvidence(data, context, errors);
   if (kind === "findings") {
     const signatureRegistry = await loadIssueSignatureRegistry(rootDir);
@@ -50,6 +51,153 @@ export async function validateArtifact(kind, data, context, rootDir) {
   if (kind === "trend") validateTrend(data, context, errors);
   if (kind === "proposal") validateProposal(data, context, errors);
   return { valid: errors.length === 0, errors };
+}
+
+function validateSourceRecords(data, errors) {
+  const start = Date.parse(data.window_start);
+  const end = Date.parse(data.window_end);
+  if (start >= end) {
+    errors.push(issue("SOURCE_RECORDS_INVALID_WINDOW", "/", "window_start must precede window_end."));
+  }
+
+  const recordCount = data.conversations.reduce(
+    (count, conversation) => count + conversation.records.length,
+    0
+  );
+  if (data.collection_summary.records_in_window !== recordCount ||
+      data.collection_summary.target_conversations_matched !== data.conversations.length) {
+    errors.push(issue(
+      "SOURCE_RECORDS_COUNT_MISMATCH",
+      "/collection_summary",
+      "Collection summary counts must match collected conversations and records."
+    ));
+  }
+  if (recordCount > 0 && data.empty_reason !== null) {
+    errors.push(issue(
+      "SOURCE_RECORDS_EMPTY_REASON_INVALID",
+      "/empty_reason",
+      "empty_reason must be null when records were collected."
+    ));
+  } else if (recordCount === 0 && data.conversations.length === 0 &&
+      data.empty_reason !== "ANALYSIS_TARGET_CONVERSATIONS_NOT_FOUND") {
+    errors.push(issue(
+      "SOURCE_RECORDS_EMPTY_REASON_INVALID",
+      "/empty_reason",
+      "Missing target conversations require ANALYSIS_TARGET_CONVERSATIONS_NOT_FOUND."
+    ));
+  } else if (recordCount === 0 && data.conversations.length > 0 &&
+      !["NO_EVENTS_IN_WINDOW", "EVENTS_IN_WINDOW_UNCOLLECTABLE"].includes(data.empty_reason)) {
+    errors.push(issue(
+      "SOURCE_RECORDS_EMPTY_REASON_INVALID",
+      "/empty_reason",
+      "An empty matched window requires a deterministic empty_reason."
+    ));
+  }
+
+  const conversationIds = new Set();
+  for (const [conversationIndex, conversation] of data.conversations.entries()) {
+    const conversationBase = `/conversations/${conversationIndex}`;
+    if (conversationIds.has(conversation.conversation_id)) {
+      errors.push(issue(
+        "SOURCE_RECORDS_CONVERSATION_DUPLICATE",
+        `${conversationBase}/conversation_id`,
+        "Conversation IDs must be unique."
+      ));
+    }
+    conversationIds.add(conversation.conversation_id);
+    if (conversation.project_id !== data.project_id) {
+      errors.push(issue(
+        "SOURCE_RECORDS_PROJECT_MISMATCH",
+        `${conversationBase}/project_id`,
+        "Conversation project_id must match the source packet."
+      ));
+    }
+
+    const sequences = new Set();
+    const toolCalls = new Set();
+    for (const [recordIndex, record] of conversation.records.entries()) {
+      const base = `${conversationBase}/records/${recordIndex}`;
+      if (record.conversation_id !== conversation.conversation_id) {
+        errors.push(issue(
+          "SOURCE_RECORDS_CONVERSATION_MISMATCH",
+          `${base}/conversation_id`,
+          "Record conversation_id must match its containing conversation."
+        ));
+      }
+      if (sequences.has(record.sequence) ||
+          (recordIndex > 0 && record.sequence <= conversation.records[recordIndex - 1].sequence)) {
+        errors.push(issue(
+          "SOURCE_RECORDS_SEQUENCE_INVALID",
+          `${base}/sequence`,
+          "Sequences must be unique and strictly increasing inside a conversation."
+        ));
+      }
+      sequences.add(record.sequence);
+      const timestamp = Date.parse(record.timestamp);
+      if (timestamp < start || timestamp >= end) {
+        errors.push(issue(
+          "SOURCE_RECORDS_TIMESTAMP_OUTSIDE_WINDOW",
+          `${base}/timestamp`,
+          "Record timestamp is outside [window_start, window_end)."
+        ));
+      }
+      if (contentHash(record) !== record.content_hash) {
+        errors.push(issue(
+          "SOURCE_RECORDS_CONTENT_HASH_MISMATCH",
+          `${base}/content_hash`,
+          "content_hash does not match canonical record content."
+        ));
+      }
+      if (record.event_type === "message") {
+        if (record.actor === "tool") {
+          errors.push(issue(
+            "SOURCE_RECORDS_EVENT_ACTOR_INVALID",
+            `${base}/actor`,
+            "Message events cannot use the tool actor."
+          ));
+        }
+        if (record.call_id !== null) {
+          errors.push(issue(
+            "SOURCE_RECORDS_CALL_ID_INVALID",
+            `${base}/call_id`,
+            "Message events cannot have call_id."
+          ));
+        }
+        continue;
+      }
+      if (record.actor !== "tool") {
+        errors.push(issue(
+          "SOURCE_RECORDS_EVENT_ACTOR_INVALID",
+          `${base}/actor`,
+          "Tool and artifact events must use the tool actor."
+        ));
+      }
+      if (!record.call_id) {
+        errors.push(issue(
+          "SOURCE_RECORDS_CALL_ID_INVALID",
+          `${base}/call_id`,
+          "Tool and artifact events require call_id."
+        ));
+        continue;
+      }
+      if (record.event_type === "tool_call") {
+        if (toolCalls.has(record.call_id)) {
+          errors.push(issue(
+            "SOURCE_RECORDS_TOOL_CALL_DUPLICATE",
+            `${base}/call_id`,
+            "Tool call IDs must be unique inside a conversation."
+          ));
+        }
+        toolCalls.add(record.call_id);
+      } else if (!toolCalls.has(record.call_id)) {
+        errors.push(issue(
+          "SOURCE_RECORDS_TOOL_CALL_MISSING",
+          `${base}/call_id`,
+          "Tool results and artifact events must reference an earlier tool call."
+        ));
+      }
+    }
+  }
 }
 
 function validateRun(run, expectedContractHash, errors) {
@@ -149,9 +297,27 @@ function validateEvidence(data, context, errors) {
 
 function validateEvidenceSourceParity(data, source, errors) {
   const sourceRecords = source.conversations.flatMap((conversation) => conversation.records);
-  const identity = (record) => `${record.content_hash}:${record.collection_status}`;
-  if (!sameItems(data.records.map(identity), sourceRecords.map(identity))) {
-    errors.push(issue("SOURCE_RECORD_PARITY_MISMATCH", "/records", "Evidence must preserve every source record exactly once."));
+  const fields = [
+    "conversation_id",
+    "timestamp",
+    "actor",
+    "sequence",
+    "event_type",
+    "call_id",
+    "source_location",
+    "content_or_reference",
+    "content_hash",
+    "collection_status"
+  ];
+  const recordsMatch = data.records.length === sourceRecords.length &&
+    data.records.every((record, index) =>
+      fields.every((field) => record[field] === sourceRecords[index][field]));
+  if (!recordsMatch) {
+    errors.push(issue(
+      "EVIDENCE_SOURCE_MISMATCH",
+      "/records",
+      "Evidence must preserve every source record in its original order."
+    ));
   }
   const expectedConversations = source.conversations.map((conversation) => JSON.stringify({
     conversation_id: conversation.conversation_id,
@@ -159,8 +325,12 @@ function validateEvidenceSourceParity(data, source, errors) {
     has_events_after_window: conversation.has_events_after_window
   }));
   const actualConversations = data.conversations.map((conversation) => JSON.stringify(conversation));
-  if (!sameItems(actualConversations, expectedConversations)) {
-    errors.push(issue("CONVERSATION_BOUNDARY_MISMATCH", "/conversations", "Conversation boundary metadata differs from source records."));
+  if (JSON.stringify(actualConversations) !== JSON.stringify(expectedConversations)) {
+    errors.push(issue(
+      "EVIDENCE_SOURCE_MISMATCH",
+      "/conversations",
+      "Conversation boundary metadata differs from source records."
+    ));
   }
 }
 

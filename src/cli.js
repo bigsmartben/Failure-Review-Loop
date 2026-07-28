@@ -35,6 +35,7 @@ async function validateCommand(args) {
   const data = await readJson(path.resolve(args.file));
   const context = {};
   if (args.run) context.run = await readJson(path.resolve(args.run));
+  if (args.source) context.source = await readJson(path.resolve(args.source));
   if (args.evidence) context.evidence = await readJson(path.resolve(args.evidence));
   if (args.findings) context.findings = await readJson(path.resolve(args.findings));
   if (args.metrics) context.metrics = await readJson(path.resolve(args.metrics));
@@ -49,7 +50,7 @@ async function validateExamples() {
   const files = (await readdir(examplesDir)).filter((name) => name.endsWith(".json"));
   let failed = false;
   for (const file of files.sort()) {
-    const match = /^(run|evidence|findings|metrics|trend|proposal)\.(valid|invalid)\./.exec(file);
+    const match = /^(source-records|run|evidence|findings|metrics|trend|proposal)\.(valid|invalid)\./.exec(file);
     if (!match) continue;
     const [, kind, expectation] = match;
     const result = await validateSchema(kind, await readJson(path.join(examplesDir, file)), rootDir);
@@ -92,7 +93,7 @@ function usage() {
 
 Commands:
   run --config FILE --project-id ID --window-start ISO --window-end ISO --timezone TZ [--target-skill FILE] [--run-id ID]
-  validate --kind run|evidence|findings|metrics|trend|proposal --file FILE [--run FILE] [--evidence FILE] [--findings FILE] [--metrics FILE] [--baseline-metrics FILE]
+  validate --kind source-records|run|evidence|findings|metrics|trend|proposal --file FILE [--run FILE] [--source FILE] [--evidence FILE] [--findings FILE] [--metrics FILE] [--baseline-metrics FILE]
   validate-examples
   probe [--config FILE]
 `;

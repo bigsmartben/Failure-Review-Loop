@@ -77,7 +77,8 @@
         "binding_method": {
           "enum": [
             "explicit_conversation_id",
-            "analysis_target_workspace_root"
+            "analysis_target_workspace_root",
+            "project_marker_plus_workspace_root"
           ]
         },
         "has_events_before_window": { "type": "boolean" },

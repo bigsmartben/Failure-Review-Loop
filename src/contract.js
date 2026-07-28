@@ -8,12 +8,14 @@ const CONTRACT_FILES = Object.freeze([
   "docs/contracts/precedence.md",
   "docs/contracts/deduplication.md",
   "docs/contracts/issue-signatures.json",
+  "schemas/source-records.schema.json",
   "schemas/run.schema.json",
   "schemas/evidence.schema.json",
   "schemas/findings.schema.json",
   "schemas/metrics.schema.json",
   "schemas/trend.schema.json",
   "schemas/proposal.schema.json",
+  "schemas/handoff.schema.json",
   "prompts/collector.md",
   "prompts/analyst.md",
   "prompts/optimizer.md"
@@ -24,7 +26,8 @@ export async function contractBundleHash(rootDir) {
   for (const relativePath of CONTRACT_FILES) {
     entries.push({
       path: relativePath,
-      content: await readFile(path.join(rootDir, relativePath), "utf8")
+      content: (await readFile(path.join(rootDir, relativePath), "utf8"))
+        .replace(/\r\n/g, "\n")
     });
   }
   return `sha256:${sha256(canonicalJson(entries))}`;

@@ -9,7 +9,7 @@ import { ROOT } from "./helpers.js";
 test("all valid and invalid schema examples behave as labelled", async () => {
   const dir = path.join(ROOT, "examples");
   const files = (await readdir(dir)).filter((file) => file.endsWith(".json"));
-  assert.equal(files.length, 16);
+  assert.equal(files.length, 18);
   for (const file of files) {
     const [, kind, expectation] = /^(source-records|run|evidence|findings|metrics|trend|proposal|handoff)\.(valid|invalid)\./.exec(file);
     const result = await validateSchema(kind, await readJson(path.join(dir, file)), ROOT);

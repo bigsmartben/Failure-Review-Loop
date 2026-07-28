@@ -7,8 +7,9 @@ from typing import Any
 from jsonschema import Draft202012Validator, FormatChecker
 
 from .errors import SddFrlError
+from .io import hash_json
 from .resources import asset_path
-from .source import EMPTY_REASONS, SUMMARY_FIELDS
+from .source import EMPTY_REASONS, SUMMARY_FIELDS, parse_datetime
 
 
 def schema_errors(kind: str, value: Any) -> list[dict[str, str]]:
@@ -32,6 +33,13 @@ def validate_schema(kind: str, value: Any) -> None:
 
 def validate_source_records(source: dict[str, Any]) -> None:
     validate_schema("source-records", source)
+    window_start = parse_datetime(source["window_start"])
+    window_end = parse_datetime(source["window_end"])
+    if window_start >= window_end:
+        raise SddFrlError(
+            "SOURCE_RECORDS_INVALID_WINDOW",
+            "window_start 必须早于 window_end。",
+        )
     summary = source["collection_summary"]
     if set(summary) != set(SUMMARY_FIELDS):
         raise SddFrlError(
@@ -76,6 +84,105 @@ def validate_source_records(source: dict[str, Any]) -> None:
             "窗口空结果缺少确定性 empty_reason。",
         )
 
+    conversation_ids: set[str] = set()
+    for conversation in source["conversations"]:
+        conversation_id = conversation["conversation_id"]
+        if conversation_id in conversation_ids:
+            raise SddFrlError(
+                "SOURCE_RECORDS_CONVERSATION_DUPLICATE",
+                f"对话 ID 重复：{conversation_id}。",
+            )
+        conversation_ids.add(conversation_id)
+        if conversation["project_id"] != source["project_id"]:
+            raise SddFrlError(
+                "SOURCE_RECORDS_PROJECT_MISMATCH",
+                f"对话 {conversation_id} 的 project_id 与采集包不一致。",
+            )
+
+        sequences: set[int] = set()
+        previous_sequence: int | None = None
+        tool_calls: set[str] = set()
+        for record in conversation["records"]:
+            if record["conversation_id"] != conversation_id:
+                raise SddFrlError(
+                    "SOURCE_RECORDS_CONVERSATION_MISMATCH",
+                    "记录 conversation_id 与所属对话不一致。",
+                )
+            sequence = record["sequence"]
+            if (
+                sequence in sequences
+                or previous_sequence is not None
+                and sequence <= previous_sequence
+            ):
+                raise SddFrlError(
+                    "SOURCE_RECORDS_SEQUENCE_INVALID",
+                    f"对话 {conversation_id} 的 sequence 必须唯一且严格递增。",
+                )
+            sequences.add(sequence)
+            previous_sequence = sequence
+
+            timestamp = parse_datetime(record["timestamp"])
+            if timestamp < window_start or timestamp >= window_end:
+                raise SddFrlError(
+                    "SOURCE_RECORDS_TIMESTAMP_OUTSIDE_WINDOW",
+                    "记录 timestamp 位于半开窗口之外。",
+                )
+            hash_input = {
+                key: record[key]
+                for key in (
+                    "conversation_id",
+                    "timestamp",
+                    "actor",
+                    "sequence",
+                    "event_type",
+                    "call_id",
+                    "source_location",
+                    "content_or_reference",
+                )
+            }
+            if hash_json(hash_input) != record["content_hash"]:
+                raise SddFrlError(
+                    "SOURCE_RECORDS_CONTENT_HASH_MISMATCH",
+                    "content_hash 与规范记录内容不一致。",
+                )
+
+            event_type = record["event_type"]
+            call_id = record["call_id"]
+            if event_type == "message":
+                if record["actor"] == "tool":
+                    raise SddFrlError(
+                        "SOURCE_RECORDS_EVENT_ACTOR_INVALID",
+                        "message 事件不能使用 tool 角色。",
+                    )
+                if call_id is not None:
+                    raise SddFrlError(
+                        "SOURCE_RECORDS_CALL_ID_INVALID",
+                        "message 事件不能包含 call_id。",
+                    )
+                continue
+            if record["actor"] != "tool":
+                raise SddFrlError(
+                    "SOURCE_RECORDS_EVENT_ACTOR_INVALID",
+                    "工具与产物事件必须使用 tool 角色。",
+                )
+            if not call_id:
+                raise SddFrlError(
+                    "SOURCE_RECORDS_CALL_ID_INVALID",
+                    "工具与产物事件必须包含 call_id。",
+                )
+            if event_type == "tool_call":
+                if call_id in tool_calls:
+                    raise SddFrlError(
+                        "SOURCE_RECORDS_TOOL_CALL_DUPLICATE",
+                        f"工具调用 ID 重复：{call_id}。",
+                    )
+                tool_calls.add(call_id)
+            elif call_id not in tool_calls:
+                raise SddFrlError(
+                    "SOURCE_RECORDS_TOOL_CALL_MISSING",
+                    f"工具结果未关联更早的工具调用：{call_id}。",
+                )
+
 
 def validate_evidence(
     evidence: dict[str, Any],
@@ -83,10 +190,31 @@ def validate_evidence(
     run: dict[str, Any],
     source: dict[str, Any],
 ) -> None:
+    validate_source_records(source)
     validate_schema("evidence", evidence)
     params = run["parameters"]
     if evidence["run_id"] != run["run_id"] or evidence["project_id"] != params["project_id"]:
         raise SddFrlError("EVIDENCE_SCOPE_MISMATCH", "evidence 与 run 的运行范围不一致。")
+    if (
+        evidence["window_start"] != params["window_start"]
+        or evidence["window_end"] != params["window_end"]
+        or evidence["contract_revision"] != params["contract_revision"]
+        or evidence["contract_bundle_hash"] != params["contract_bundle_hash"]
+    ):
+        raise SddFrlError("EVIDENCE_SCOPE_MISMATCH", "evidence 与 run 的契约或时间窗口不一致。")
+    expected_conversations = [
+        {
+            "conversation_id": conversation["conversation_id"],
+            "has_events_before_window": conversation["has_events_before_window"],
+            "has_events_after_window": conversation["has_events_after_window"],
+        }
+        for conversation in source["conversations"]
+    ]
+    if evidence["conversations"] != expected_conversations:
+        raise SddFrlError(
+            "EVIDENCE_SOURCE_MISMATCH",
+            "evidence 对话边界元数据与 source-records 不一致。",
+        )
     source_records = [
         record
         for conversation in source["conversations"]
@@ -94,7 +222,14 @@ def validate_evidence(
     ]
     if len(source_records) != len(evidence["records"]):
         raise SddFrlError("EVIDENCE_SOURCE_MISMATCH", "evidence 没有一对一覆盖原始记录。")
+    evidence_ids: set[str] = set()
+    canonical_by_hash: dict[str, str] = {}
     for expected, actual in zip(source_records, evidence["records"], strict=True):
+        if actual["evidence_id"] in evidence_ids:
+            raise SddFrlError("EVIDENCE_SOURCE_MISMATCH", "evidence_id 必须唯一。")
+        evidence_ids.add(actual["evidence_id"])
+        if actual["project_id"] != source["project_id"]:
+            raise SddFrlError("EVIDENCE_SOURCE_MISMATCH", "evidence 记录项目不一致。")
         for key in (
             "conversation_id",
             "timestamp",
@@ -112,6 +247,13 @@ def validate_evidence(
                     "EVIDENCE_SOURCE_MISMATCH",
                     f"evidence 字段 {key} 与确定性采集结果不一致。",
                 )
+        expected_duplicate = canonical_by_hash.get(actual["content_hash"])
+        if actual["duplicate_of"] != expected_duplicate:
+            raise SddFrlError(
+                "EVIDENCE_SOURCE_MISMATCH",
+                "duplicate_of 必须指向更早的同哈希规范记录。",
+            )
+        canonical_by_hash.setdefault(actual["content_hash"], actual["evidence_id"])
 
 
 def validate_findings(

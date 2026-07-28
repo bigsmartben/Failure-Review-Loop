@@ -1,0 +1,93 @@
+{
+  "schema_version": "1.0.0",
+  "contract_revision": "2026-07-24.contract-first.1",
+  "contract_bundle_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+  "run_id": "20260727T010000Z_harness_a1b2c3",
+  "project_id": "harness",
+  "window_start": "2026-07-26T00:00:00+08:00",
+  "window_end": "2026-07-27T00:00:00+08:00",
+  "conversations": [
+    {
+      "conversation_id": "conv-regression-1",
+      "has_events_before_window": false,
+      "has_events_after_window": false
+    }
+  ],
+  "records": [
+    {
+      "evidence_id": "ev_0_0",
+      "conversation_id": "conv-regression-1",
+      "project_id": "harness",
+      "timestamp": "2026-07-26T01:00:00+08:00",
+      "actor": "user",
+      "sequence": 0,
+      "event_type": "message",
+      "call_id": null,
+      "source_location": "session.jsonl:2:response_item:user",
+      "content_or_reference": "请用中文回答。",
+      "content_hash": "sha256:8a6ef6bea925ff7499b668da4921b8ee0975be1b6580aefdc1491ff3d32cec64",
+      "collection_status": "collected",
+      "duplicate_of": null
+    },
+    {
+      "evidence_id": "ev_0_1",
+      "conversation_id": "conv-regression-1",
+      "project_id": "harness",
+      "timestamp": "2026-07-26T01:01:00+08:00",
+      "actor": "assistant",
+      "sequence": 1,
+      "event_type": "message",
+      "call_id": null,
+      "source_location": "session.jsonl:3:response_item:assistant",
+      "content_or_reference": "I will answer in English.",
+      "content_hash": "sha256:58e2d3746d3e08c99635c169b42fc3fd31f69edc5dbe40f32b3eaf0793af06c2",
+      "collection_status": "collected",
+      "duplicate_of": null
+    },
+    {
+      "evidence_id": "ev_0_2",
+      "conversation_id": "conv-regression-1",
+      "project_id": "harness",
+      "timestamp": "2026-07-26T01:02:00+08:00",
+      "actor": "tool",
+      "sequence": 2,
+      "event_type": "tool_call",
+      "call_id": "call-language-1",
+      "source_location": "session.jsonl:4:response_item:function_call",
+      "content_or_reference": "{\"name\":\"check_language\",\"arguments\":{\"text\":\"I will answer in English.\"},\"call_id\":\"call-language-1\"}",
+      "content_hash": "sha256:b86f52c059b5a9c40f02552a7991d2814b60004130c0c0da4533b8e21f8af05a",
+      "collection_status": "collected",
+      "duplicate_of": null
+    },
+    {
+      "evidence_id": "ev_0_3",
+      "conversation_id": "conv-regression-1",
+      "project_id": "harness",
+      "timestamp": "2026-07-26T01:03:00+08:00",
+      "actor": "tool",
+      "sequence": 3,
+      "event_type": "tool_result",
+      "call_id": "call-language-1",
+      "source_location": "session.jsonl:5:response_item:function_call_output",
+      "content_or_reference": "detected: English",
+      "content_hash": "sha256:325442cd7cb853d20ec6f9577ee08f9c6b8670f1ae031d967ab8e6c4f14e958d",
+      "collection_status": "collected",
+      "duplicate_of": null
+    },
+    {
+      "evidence_id": "ev_0_4",
+      "conversation_id": "conv-regression-1",
+      "project_id": "harness",
+      "timestamp": "2026-07-26T01:04:00+08:00",
+      "actor": "user",
+      "sequence": 4,
+      "event_type": "message",
+      "call_id": null,
+      "source_location": "session.jsonl:6:response_item:user",
+      "content_or_reference": "要求是中文，但结果是英文。",
+      "content_hash": "sha256:f10292c62c3a3aa945c2d6f48b48a77b86c815902130b20fb4820f8e37fffadb",
+      "collection_status": "collected",
+      "duplicate_of": null
+    }
+  ]
+}

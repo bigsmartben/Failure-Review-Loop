@@ -43,7 +43,11 @@ def asset_path(group: str, name: str) -> Path:
 def contract_bundle_hash() -> str:
     entries = [
         {
-            "path": f"{group}/{name}",
+            "path": (
+                f"docs/contracts/{name}"
+                if group == "contracts"
+                else f"{group}/{name}"
+            ),
             "content": asset_path(group, name).read_text(encoding="utf-8"),
         }
         for group, name in CONTRACT_FILES
