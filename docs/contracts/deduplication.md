@@ -20,6 +20,22 @@ conversation_id
 
 格式为 `sha256:<64 个小写十六进制字符>`。同一事件从不同来源出现时保留多条 evidence，重复项通过 `duplicate_of` 直接指向规范记录；不允许引用链。
 
+## 本地回归数据最小集合
+
+未来在用户本地环境构造回归案例时，采集契约提供以下最小数据：
+
+- `content_or_reference`、`actor`：原始输入、响应和角色；
+- `conversation_id`、`sequence`、`timestamp`：对话范围与事件顺序；
+- `event_type`、`call_id`：工具调用及结果关联；
+- `source_location`、`content_hash`：来源追踪与内容完整性；
+- `project_id`、窗口和运行身份：数据所属范围。
+
+例如，“用户要求中文回答，但 Skill 输出英文”的失败记录，应按顺序保存用户请求、
+助手错误响应、相关工具调用与结果，以及用户否定。`evidence.json` 必须按原顺序逐字段
+覆盖 `source-records.json`；缺失、重排或改写任一记录都属于契约错误。
+
+本契约只保证历史数据完整且可校验，不负责执行 Skill、判断回归通过或生成回归报告。
+
 ## 任务片段（task episode）
 
 一个任务片段对应一个可区分的用户目标。用户对同一目标的补充、纠正和返工仍属于原任务；实质不同的新目标建立新任务。

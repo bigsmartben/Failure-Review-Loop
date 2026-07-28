@@ -131,12 +131,30 @@ export async function collectSourcePacket({ config, configDir, projectId, window
   const start = Date.parse(windowStart);
   const end = Date.parse(windowEnd);
   const conversations = [];
+  const summary = {
+    session_files_scanned: files.length,
+    target_conversations_matched: 0,
+    records_before_window: 0,
+    records_in_window: 0,
+    records_after_window: 0,
+    skipped_missing_meta: 0,
+    skipped_outside_target: 0,
+    skipped_uncollectable: 0
+  };
+  let rawEventsInWindow = 0;
 
   for (const file of files) {
     const meta = await readSessionMeta(file);
-    if (!meta?.cwd) continue;
+    if (!meta?.cwd) {
+      summary.skipped_missing_meta += 1;
+      continue;
+    }
     const decision = await bindingAccepts(meta, binding, configDir);
-    if (!decision.accepted) continue;
+    if (!decision.accepted) {
+      summary.skipped_outside_target += 1;
+      continue;
+    }
+    summary.target_conversations_matched += 1;
     const conversationId = meta.id ?? meta.session_id;
     const records = [];
     let sequence = 0;
@@ -154,18 +172,32 @@ export async function collectSourcePacket({ config, configDir, projectId, window
       const row = JSON.parse(line);
       if (row.type !== "response_item") continue;
       const timestamp = Date.parse(row.timestamp);
+      if (!Number.isFinite(timestamp) || !row.payload || typeof row.payload !== "object") {
+        summary.skipped_uncollectable += 1;
+        continue;
+      }
+      if (timestamp >= start && timestamp < end) rawEventsInWindow += 1;
       const items = classifyResponse(row.payload);
+      if (!items.length) {
+        summary.skipped_uncollectable += 1;
+        continue;
+      }
       for (const item of items) {
         const itemSequence = sequence++;
         if (timestamp < start) {
           hasEventsBeforeWindow = true;
+          summary.records_before_window += 1;
           continue;
         }
         if (timestamp >= end) {
           hasEventsAfterWindow = true;
+          summary.records_after_window += 1;
           continue;
         }
-        if (!item.content) continue;
+        if (!item.content) {
+          summary.skipped_uncollectable += 1;
+          continue;
+        }
         const content = config.privacy?.content_mode === "redact_secrets"
           ? redact(item.content)
           : item.content;
@@ -185,26 +217,35 @@ export async function collectSourcePacket({ config, configDir, projectId, window
               : "collected"
         };
         records.push({ ...sourceRecord, content_hash: contentHash(sourceRecord) });
+        summary.records_in_window += 1;
       }
     }
 
-    if (records.length) {
-      conversations.push({
-        conversation_id: conversationId,
-        project_id: projectId,
-        binding_method: decision.method,
-        has_events_before_window: hasEventsBeforeWindow,
-        has_events_after_window: hasEventsAfterWindow,
-        records
-      });
-    }
+    conversations.push({
+      conversation_id: conversationId,
+      project_id: projectId,
+      binding_method: decision.method,
+      has_events_before_window: hasEventsBeforeWindow,
+      has_events_after_window: hasEventsAfterWindow,
+      records
+    });
   }
 
+  const emptyReason = summary.target_conversations_matched === 0
+    ? "ANALYSIS_TARGET_CONVERSATIONS_NOT_FOUND"
+    : summary.records_in_window > 0
+      ? null
+      : rawEventsInWindow > 0
+        ? "EVENTS_IN_WINDOW_UNCOLLECTABLE"
+        : "NO_EVENTS_IN_WINDOW";
   return {
     schema_version: "1.0.0",
+    source_kind: "local_codex_sessions_jsonl",
     project_id: projectId,
     window_start: windowStart,
     window_end: windowEnd,
+    empty_reason: emptyReason,
+    collection_summary: summary,
     conversations
   };
 }

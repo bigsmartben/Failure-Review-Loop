@@ -19,9 +19,21 @@ function sourceFromRecords(records) {
   const conversationIds = [...new Set(records.map((record) => record.conversation_id))];
   return {
     schema_version: "1.0.0",
+    source_kind: "local_codex_sessions_jsonl",
     project_id: "test-project",
     window_start: OPTIONS.windowStart,
     window_end: OPTIONS.windowEnd,
+    empty_reason: records.length ? null : "ANALYSIS_TARGET_CONVERSATIONS_NOT_FOUND",
+    collection_summary: {
+      session_files_scanned: conversationIds.length,
+      target_conversations_matched: conversationIds.length,
+      records_before_window: 0,
+      records_in_window: records.length,
+      records_after_window: 0,
+      skipped_missing_meta: 0,
+      skipped_outside_target: 0,
+      skipped_uncollectable: 0
+    },
     conversations: conversationIds.map((conversationId) => ({
       conversation_id: conversationId,
       project_id: "test-project",
@@ -63,9 +75,21 @@ function scenario(runId, count = 3) {
 function emptySource() {
   return {
     schema_version: "1.0.0",
+    source_kind: "local_codex_sessions_jsonl",
     project_id: "test-project",
     window_start: OPTIONS.windowStart,
     window_end: OPTIONS.windowEnd,
+    empty_reason: "ANALYSIS_TARGET_CONVERSATIONS_NOT_FOUND",
+    collection_summary: {
+      session_files_scanned: 0,
+      target_conversations_matched: 0,
+      records_before_window: 0,
+      records_in_window: 0,
+      records_after_window: 0,
+      skipped_missing_meta: 0,
+      skipped_outside_target: 0,
+      skipped_uncollectable: 0
+    },
     conversations: []
   };
 }

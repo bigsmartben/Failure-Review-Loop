@@ -4,6 +4,8 @@ import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { collectSourcePacket } from "../src/source.js";
+import { validateArtifact } from "../src/validation.js";
+import { ROOT } from "./helpers.js";
 
 function row(timestamp, type, payload) {
   return JSON.stringify({ timestamp, type, payload });
@@ -47,6 +49,8 @@ test("Codex source adapter requires project marker and filters [start,end)", asy
     config, configDir: temp, projectId: "target",
     windowStart: "2026-07-24T00:00:00Z", windowEnd: "2026-07-25T00:00:00Z"
   });
+  const validation = await validateArtifact("source-records", packet, {}, ROOT);
+  assert.equal(validation.valid, true, JSON.stringify(validation.errors));
   assert.equal(packet.conversations.length, 1);
   assert.equal(packet.conversations[0].conversation_id, "accepted");
   assert.equal(packet.conversations[0].has_events_before_window, true);
@@ -65,6 +69,7 @@ test("Codex source adapter requires project marker and filters [start,end)", asy
     packet.conversations[0].records.length
   );
   assert(!JSON.stringify(packet).includes("sk-abcdefghijklmnop"));
-  assert(!JSON.stringify(packet).includes("outside"));
+  assert(!packet.conversations[0].records.some((item) =>
+    item.content_or_reference === "outside"));
   assert(!JSON.stringify(packet).includes("end excluded"));
 });

@@ -313,6 +313,10 @@ export async function executeRun(options, dependencies = {}) {
         config, configDir, projectId: options.projectId,
         windowStart: parameters.window_start, windowEnd: parameters.window_end
       });
+      const sourceResult = await validateArtifact("source-records", source, {}, rootDir);
+      if (!sourceResult.valid) {
+        throw new Error(`SOURCE_RECORDS_VALIDATION_FAILED: ${JSON.stringify(sourceResult.errors)}`);
+      }
       await writeJson(path.join(runDir, "source-records.json"), source);
       const [kind, filename] = STAGE_FILES.collector;
       const artifactFile = path.join(runDir, filename);
