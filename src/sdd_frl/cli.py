@@ -9,9 +9,8 @@ from . import __version__
 from .errors import SddFrlError
 from .pipeline import continue_review, finalize_review, prepare_review, run_review
 from .resources import asset_path
-from .source import probe_source
 from .validation import load_and_validate_file, schema_errors
-from .workspace import init_workspace, load_workspace
+from .workspace import init_workspace
 
 KINDS = (
     "source-records",
@@ -28,17 +27,14 @@ KINDS = (
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="sdd-frl",
-        description="Failure Review Loop workspace for a separate Codex analysis target",
+        description="Failure Review Loop for Codex local session regression",
     )
     parser.add_argument("--version", action="version", version=f"sdd-frl {__version__}")
     commands = parser.add_subparsers(dest="command")
 
-    init = commands.add_parser("init", help="初始化 FRL 工作区并绑定分析目标")
+    init = commands.add_parser("init", help="初始化当前本地运行目录")
     init.add_argument("path", nargs="?", default=".")
-    init.add_argument("--project-id", help="FRL 工作区项目 ID")
     init.add_argument("--timezone")
-    init.add_argument("--analysis-target", help="要采集 Codex App 对话的目标项目路径")
-    init.add_argument("--analysis-project-id", help="分析目标项目 ID")
 
     for name, help_text in (
         ("prepare", "采集并返回 Codex App 原生子代理 handoff"),
@@ -49,7 +45,7 @@ def _parser() -> argparse.ArgumentParser:
         run.add_argument("--date", dest="review_date")
         run.add_argument("--window-start")
         run.add_argument("--window-end")
-        run.add_argument("--project-id")
+        run.add_argument("--target", required=True, help="本次任务分析的目标项目绝对路径")
         run.add_argument("--run-id")
 
     resume = commands.add_parser("continue", help="校验原生子代理输出并推进状态机")
@@ -61,9 +57,6 @@ def _parser() -> argparse.ArgumentParser:
     finalize = commands.add_parser("finalize", help="生成并发布最终复盘报告")
     finalize.add_argument("path", nargs="?", default=".")
     finalize.add_argument("--run-id", required=True)
-
-    probe = commands.add_parser("probe", help="检查工作区、session 数据源与目标绑定")
-    probe.add_argument("path", nargs="?", default=".")
 
     validate = commands.add_parser("validate", help="按 JSON Schema 校验产物")
     validate.add_argument("--kind", choices=KINDS, required=True)
@@ -105,20 +98,17 @@ def main() -> int:
         if args.command == "init":
             _print(init_workspace(
                 args.path,
-                project_id=args.project_id,
                 timezone_name=args.timezone,
-                analysis_target=args.analysis_target,
-                analysis_project_id=args.analysis_project_id,
             ))
             return 0
         if args.command in {"prepare", "run"}:
             runner = prepare_review if args.command == "prepare" else run_review
             result = runner(
                 args.path,
+                target=args.target,
                 review_date=args.review_date,
                 window_start=args.window_start,
                 window_end=args.window_end,
-                project_id=args.project_id,
                 run_id=args.run_id,
             )
             _print(result)
@@ -136,29 +126,6 @@ def main() -> int:
             result = finalize_review(args.path, run_id=args.run_id)
             _print(result)
             return 1 if result["status"].startswith("FAILED_") else 0
-        if args.command == "probe":
-            workspace = load_workspace(args.path)
-            from .workspace import inspect_agent_configuration
-
-            agents = inspect_agent_configuration(workspace.root)
-            source = probe_source(workspace)
-            result = {
-                "ready": not source["blocker_codes"],
-                "runtime_host": "Codex App scheduled task",
-                "workspace": str(workspace.root),
-                "workspace_project_id": workspace.workspace_project_id,
-                "analysis_target": {
-                    "workspace_root": str(workspace.analysis_root),
-                    "project_id": workspace.project_id,
-                },
-                "project_id": workspace.project_id,
-                "timezone": workspace.timezone,
-                "agents": agents,
-                "source": source,
-                "blocker_codes": source["blocker_codes"],
-            }
-            _print(result)
-            return 0
         if args.command == "validate":
             value = load_and_validate_file(args.kind, Path(args.file))
             _print({"valid": True, "kind": args.kind, "file": str(Path(args.file).resolve())})

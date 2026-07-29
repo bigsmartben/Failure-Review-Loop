@@ -51,7 +51,7 @@
     "task_episode": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["task_episode_id", "conversation_id", "goal", "expected_outcome", "start_sequence", "end_sequence", "context_status", "context_basis", "boundary_evidence_ids", "outcome_status", "outcome_basis", "acceptance_criteria", "evidence_ids", "outcome_evidence_ids", "interaction_events", "counts", "facts", "inferences", "unknowns"],
+      "required": ["task_episode_id", "conversation_id", "goal", "expected_outcome", "start_sequence", "end_sequence", "context_status", "context_basis", "boundary_evidence_ids", "outcome_status", "outcome_basis", "acceptance_criteria", "evidence_ids", "outcome_evidence_ids", "interaction_events", "counts", "execution_summary", "divergences", "alignments", "facts", "inferences", "unknowns"],
       "properties": {
         "task_episode_id": { "type": "string", "pattern": "^task_[a-zA-Z0-9_-]+$" },
         "conversation_id": { "type": "string", "minLength": 1 },
@@ -103,9 +103,66 @@
             "rework_count": { "type": "integer", "minimum": 0 }
           }
         },
+        "execution_summary": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "divergences": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/divergence" }
+        },
+        "alignments": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/alignment" }
+        },
         "facts": { "type": "array", "items": { "type": "string", "minLength": 1 } },
         "inferences": { "type": "array", "items": { "type": "string", "minLength": 1 } },
         "unknowns": { "type": "array", "items": { "type": "string", "minLength": 1 } }
+      }
+    },
+    "divergence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["divergence_id", "summary", "user_expectation", "agent_behavior", "status", "root_cause", "optimization_target", "optimization_direction", "acceptance_check", "evidence_ids"],
+      "properties": {
+        "divergence_id": { "type": "string", "pattern": "^divergence_[a-zA-Z0-9_-]+$" },
+        "summary": { "type": "string", "minLength": 1 },
+        "user_expectation": { "type": "string", "minLength": 1 },
+        "agent_behavior": { "type": "string", "minLength": 1 },
+        "status": { "enum": ["resolved", "unresolved"] },
+        "root_cause": { "type": "string", "minLength": 1 },
+        "optimization_target": { "enum": ["prompt", "skill", "agent", "unknown"] },
+        "optimization_direction": { "type": "string", "minLength": 1 },
+        "acceptance_check": { "type": "string", "minLength": 1 },
+        "evidence_ids": {
+          "type": "array",
+          "minItems": 2,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/evidence_id" }
+        }
+      }
+    },
+    "alignment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["alignment_id", "divergence_id", "summary", "resulting_action", "evidence_ids"],
+      "properties": {
+        "alignment_id": { "type": "string", "pattern": "^alignment_[a-zA-Z0-9_-]+$" },
+        "divergence_id": {
+          "oneOf": [
+            { "type": "string", "pattern": "^divergence_[a-zA-Z0-9_-]+$" },
+            { "type": "null" }
+          ]
+        },
+        "summary": { "type": "string", "minLength": 1 },
+        "resulting_action": { "type": "string", "minLength": 1 },
+        "evidence_ids": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/evidence_id" }
+        }
       }
     },
     "excluded_evidence": {

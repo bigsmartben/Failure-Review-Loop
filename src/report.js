@@ -73,6 +73,11 @@ export async function writeReport(file, run, artifacts = {}) {
     );
   }
 
+  if (findings) {
+    lines.push(...renderFindingsSection(findings, evidence).split("\n"));
+    lines.push("");
+  }
+
   if (metrics) {
     lines.push(
       "## 达成率",
@@ -119,11 +124,6 @@ export async function writeReport(file, run, artifacts = {}) {
         ""
       );
     }
-  }
-
-  if (findings) {
-    lines.push(...renderFindingsSection(findings, evidence).split("\n"));
-    lines.push("");
   }
 
   if (run.status === "COMPLETED_WITH_FINDINGS" && !proposal) {

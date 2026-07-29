@@ -5,7 +5,7 @@
 ## 唯一输入
 
 - `run.json` 中锁定的 `run_id`、`project_id` 和时间窗口；
-- `source-records.json` 中已完成项目绑定、时间过滤和确定性排序的原始记录；
+- `source-records.json` 中已按本次目标筛选、完成时间过滤和确定性排序的原始记录；
 - `evidence.schema.json` 输出契约。
 
 不得读取其他运行、`findings.json`、`metrics.json`、`trend.json`、`proposal.json` 或任何改进载体。

@@ -1,8 +1,5 @@
-import { mkdtemp, writeFile } from "node:fs/promises";
-import os from "node:os";
 import path from "node:path";
 import { contentHash, issueClusterId, problemFingerprint } from "../src/hash.js";
-import { writeJson } from "../src/io.js";
 import { CONTRACT_REVISION, contractBundleHash } from "../src/contract.js";
 
 export const ROOT = path.dirname(path.dirname(new URL(import.meta.url).pathname.replace(/^\/([A-Z]:)/, "$1")));
@@ -121,6 +118,9 @@ export function taskEpisode(
     outcome_evidence_ids: outcomeEvidenceIds,
     interaction_events: interactionEvents,
     counts,
+    execution_summary: [`Completed Goal ${id}.`],
+    divergences: [],
+    alignments: [],
     facts: ["Observed task evidence."],
     inferences: [],
     unknowns: outcomeStatus === "unknown" ? ["Outcome is not evidenced."] : []
@@ -205,39 +205,6 @@ export function findings(runId, tasks, instances = [], excludedEvidence = []) {
         item.signature_status === "registered")
       .map((item) => item.issue_cluster_id)
   };
-}
-
-export async function tempSetup({ useLegacyTargets = true, improvementTargets } = {}) {
-  const temp = await mkdtemp(path.join(os.tmpdir(), "failure-review-test-"));
-  const target = path.join(temp, "SKILL.md");
-  const agents = path.join(temp, "AGENTS.md");
-  await writeFile(target, "# Test skill\n", "utf8");
-  await writeFile(agents, "# Test instructions\n", "utf8");
-  const configFile = path.join(temp, "config.json");
-  const config = {
-    schema_version: "1.0.0",
-    runs_dir: path.join(temp, "runs"),
-    codex_home: null,
-    project_bindings: [{
-      project_id: "test-project",
-      roots: [],
-      conversation_ids: [],
-      improvement_target_ids: improvementTargets?.map((item) => item.id)
-    }],
-    models: {
-      collector: { planned_name: "Luna", model: "fake", reasoning_effort: "low" },
-      analyst: { planned_name: "Sol", model: "fake", reasoning_effort: "high" },
-      optimizer: { planned_name: "Sol", model: "fake", reasoning_effort: "xhigh" }
-    },
-    privacy: { content_mode: "redact_secrets", retention_days: null, copy_raw_conversations: false }
-  };
-  if (useLegacyTargets) {
-    config.target_skill_allowlist = [target];
-    delete config.project_bindings[0].improvement_target_ids;
-  }
-  if (improvementTargets !== undefined) config.improvement_targets = improvementTargets;
-  await writeJson(configFile, config);
-  return { temp, target, agents, configFile, runsDir: path.join(temp, "runs") };
 }
 
 export const OPTIONS = {

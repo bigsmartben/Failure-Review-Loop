@@ -2,13 +2,13 @@
   "evidence": {
     "records": [
       {
-        "evidence_id": "ev_cleanup",
+        "evidence_id": "ev_user_report",
         "source_location": "C:\\Users\\Alice\\private\\session.jsonl:42",
         "content_or_reference": "token sk-live-super-secret appeared in raw conversation"
       },
       {
-        "evidence_id": "ev_delivery",
-        "source_location": "C:\\Users\\Alice\\private\\session.jsonl:99",
+        "evidence_id": "ev_agent_e2e",
+        "source_location": "C:\\Users\\Alice\\private\\session.jsonl:43",
         "content_or_reference": "raw conversation must never be copied"
       }
     ]
@@ -16,132 +16,70 @@
   "findings": {
     "task_episodes": [
       {
-        "task_episode_id": "task_cleanup",
-        "goal": "清理嵌套评测仓库",
-        "expected_outcome": "主仓库与嵌套仓库均保持干净",
-        "outcome_status": "not_achieved",
-        "outcome_basis": "verified_expectation_mismatch",
-        "acceptance_criteria": [
+        "task_episode_id": "task_target_report",
+        "goal": "生成目标项目分析报告",
+        "expected_outcome": "使用已采集数据分析目标项目本身",
+        "outcome_status": "achieved",
+        "execution_summary": [
+          "读取目标运行的采集证据。",
+          "首次交付错误地分析了 E2E 验收过程。",
+          "用户纠正后重新生成目标项目报告。"
+        ],
+        "divergences": [
           {
-            "description": "清理目标后主仓库与嵌套仓库均保持干净"
+            "divergence_id": "divergence_report_subject",
+            "summary": "报告对象识别错误",
+            "user_expectation": "分析目标项目本身",
+            "agent_behavior": "首次生成了 E2E 验收分析报告",
+            "status": "resolved",
+            "root_cause": "报告提示词没有明确区分分析目标与运行过程。",
+            "optimization_target": "prompt",
+            "optimization_direction": "明确报告对象只能是运行参数中的分析目标。",
+            "acceptance_check": "使用测试目录分析目标项目时，报告正文不得以 E2E 验收为对象。",
+            "evidence_ids": [
+              "ev_user_report",
+              "ev_agent_e2e"
+            ]
           }
         ],
-        "facts": [
-          "首次清理命令被 Git-root 安全检查阻止。"
-        ],
-        "inferences": [
-          "安全比较可能没有先规范化路径。"
-        ],
-        "unknowns": []
+        "alignments": [
+          {
+            "alignment_id": "alignment_report_subject",
+            "divergence_id": "divergence_report_subject",
+            "summary": "双方重新确认报告对象是目标项目。",
+            "resulting_action": "重新读取目标证据并生成项目报告。",
+            "evidence_ids": [
+              "ev_user_report"
+            ]
+          }
+        ]
       },
       {
-        "task_episode_id": "task_delivery",
-        "goal": "完成并推送治理工作流",
-        "expected_outcome": "变更已推送并合并",
-        "outcome_status": "unknown",
-        "outcome_basis": "insufficient_evidence",
-        "acceptance_criteria": [],
-        "facts": [
-          "运行记录中没有 Push、PR 或 Merge 的任务绑定。"
+        "task_episode_id": "task_issue_delivery",
+        "goal": "实现并交付 Issue #8",
+        "expected_outcome": "完成实现、验证和交付",
+        "outcome_status": "achieved",
+        "execution_summary": [
+          "完成实现与测试。",
+          "推送变更并合并 PR。",
+          "更新 Issue 完成说明。"
         ],
-        "inferences": [],
-        "unknowns": [
-          "无法确认外部仓库是否收到变更。"
+        "divergences": [],
+        "alignments": [
+          {
+            "alignment_id": "alignment_delivery_scope",
+            "divergence_id": null,
+            "summary": "双方确认只提交 Issue #8 的相关文件。",
+            "resulting_action": "保留用户原有未提交修改。",
+            "evidence_ids": [
+              "ev_user_report"
+            ]
+          }
         ]
       }
     ],
-    "problem_instances": [
-      {
-        "problem_instance_id": "pi_cleanup_unmet",
-        "task_episode_id": "task_cleanup",
-        "summary": "清理命令被路径安全检查错误阻止",
-        "facts": [
-          "等价 Windows 路径使用了不同的分隔符表示。"
-        ],
-        "inferences": [
-          "未规范化路径会导致等价路径比较失败。"
-        ],
-        "unknowns": [],
-        "evidence_ids": [
-          "ev_cleanup"
-        ]
-      },
-      {
-        "problem_instance_id": "pi_delivery_unmet",
-        "task_episode_id": "task_delivery",
-        "summary": "治理工作流没有完成用户要求的交付动作",
-        "facts": [
-          "交付在首次 Push 之前停止。"
-        ],
-        "inferences": [],
-        "unknowns": [
-          "停止是否由权限限制导致尚不明确。"
-        ],
-        "evidence_ids": [
-          "ev_delivery"
-        ]
-      },
-      {
-        "problem_instance_id": "pi_cleanup_repeat",
-        "task_episode_id": "task_cleanup",
-        "summary": "路径分隔符不一致导致清理命令重试",
-        "facts": [
-          "规范化路径后重试成功。"
-        ],
-        "inferences": [],
-        "unknowns": [
-          "缺少对应证据记录。"
-        ],
-        "evidence_ids": [
-          "ev_missing"
-        ]
-      }
-    ],
-    "issue_clusters": [
-      {
-        "issue_cluster_id": "ic_1111111111111111",
-        "pattern": "unmet_expectation",
-        "issue_signature": "result_does_not_match_requested_output",
-        "signature_status": "registered",
-        "root_cause_category": "workflow_gap",
-        "instance_count": 2,
-        "problem_instance_ids": [
-          "pi_cleanup_unmet",
-          "pi_delivery_unmet"
-        ],
-        "task_episode_ids": [
-          "task_cleanup",
-          "task_delivery"
-        ],
-        "severity_total": 4,
-        "root_cause": "工作流缺少把结构化结果推进到用户要求交付状态的完整步骤。",
-        "root_cause_confidence": "high",
-        "evidence_ids": [
-          "ev_cleanup",
-          "ev_delivery"
-        ]
-      },
-      {
-        "issue_cluster_id": "ic_2222222222222222",
-        "pattern": "repeated_execution",
-        "issue_signature": "path_separator_mismatch_blocks_cleanup",
-        "signature_status": "candidate",
-        "root_cause_category": "script_bug",
-        "instance_count": 1,
-        "problem_instance_ids": [
-          "pi_cleanup_repeat"
-        ],
-        "task_episode_ids": [
-          "task_cleanup"
-        ],
-        "severity_total": 1,
-        "root_cause": "路径字符串可能在安全比较前没有被规范化。",
-        "root_cause_confidence": "unknown",
-        "evidence_ids": [
-          "ev_missing"
-        ]
-      }
-    ],
+    "problem_instances": [],
+    "issue_clusters": [],
     "optimizer_eligible_cluster_ids": []
   }
 }

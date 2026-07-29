@@ -77,29 +77,6 @@ def render_report(
         f"- 结果：{headline}",
         "",
     ]
-    if source:
-        summary = source["collection_summary"]
-        lines.extend([
-            "## 采集诊断",
-            "",
-            f"- 来源：`{source['source_kind']}`",
-            f"- 空结果原因：`{source['empty_reason'] or 'NONE'}`",
-            f"- 扫描 session 文件：{summary['session_files_scanned']}",
-            f"- 匹配目标对话：{summary['target_conversations_matched']}",
-            (
-                "- 窗口前 / 窗口内 / 窗口后记录："
-                f"{summary['records_before_window']} / "
-                f"{summary['records_in_window']} / "
-                f"{summary['records_after_window']}"
-            ),
-            (
-                "- 跳过（缺少元数据 / 目标外 / 不可采集）："
-                f"{summary['skipped_missing_meta']} / "
-                f"{summary['skipped_outside_target']} / "
-                f"{summary['skipped_uncollectable']}"
-            ),
-            "",
-        ])
     if failed:
         failure = run.get("failure") or {}
         lines.extend([
@@ -110,6 +87,9 @@ def render_report(
             f"- 原因：{failure.get('message', '未知错误')}",
             "",
         ])
+    if findings:
+        lines.extend(render_findings_section(findings, evidence).splitlines())
+        lines.append("")
     if metrics:
         counts = metrics["task_counts"]
         lines.extend([
@@ -155,9 +135,29 @@ def render_report(
                 "- 解释：仅表示观察趋势，不代表确定因果关系。",
                 "",
             ])
-    if findings:
-        lines.extend(render_findings_section(findings, evidence).splitlines())
-        lines.append("")
+    if source:
+        summary = source["collection_summary"]
+        lines.extend([
+            "## 数据范围",
+            "",
+            f"- 来源：`{source['source_kind']}`",
+            f"- 空结果原因：`{source['empty_reason'] or 'NONE'}`",
+            f"- 扫描 session 文件：{summary['session_files_scanned']}",
+            f"- 匹配目标对话：{summary['target_conversations_matched']}",
+            (
+                "- 窗口前 / 窗口内 / 窗口后记录："
+                f"{summary['records_before_window']} / "
+                f"{summary['records_in_window']} / "
+                f"{summary['records_after_window']}"
+            ),
+            (
+                "- 跳过（缺少元数据 / 目标外 / 不可采集）："
+                f"{summary['skipped_missing_meta']} / "
+                f"{summary['skipped_outside_target']} / "
+                f"{summary['skipped_uncollectable']}"
+            ),
+            "",
+        ])
     if proposal:
         lines.extend(["## 改进提案", ""])
         for item in proposal["proposals"]:
@@ -187,10 +187,11 @@ def publish_report(
     *,
     workspace: Workspace,
     raw_report: Path,
+    project_id: str,
     review_date: str,
     status: str,
 ) -> tuple[Path, bool]:
-    destination = workspace.reports_dir / f"{review_date}.md"
+    destination = workspace.reports_dir / project_id / f"{review_date}.md"
     existing = _existing_status(destination)
     if status.startswith("FAILED_") and existing and existing.startswith("COMPLETED_"):
         return destination, False

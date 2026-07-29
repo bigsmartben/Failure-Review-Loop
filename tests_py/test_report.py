@@ -18,6 +18,8 @@ def test_actionable_findings_match_shared_golden_contract() -> None:
     assert rendered == GOLDEN.read_text(encoding="utf-8").rstrip()
     assert "sk-live-super-secret" not in rendered
     assert "C:\\Users\\Alice" not in rendered
-    assert "EVIDENCE_POINTER_UNRESOLVED" in rendered
-    assert "同一任务关联 2 个问题簇" in rendered
-    assert "证据不足，根因尚未确认" in rendered
+    assert "报告对象识别错误（已解决）" in rendered
+    assert "优化对象：Prompt" in rendered
+    assert "未发现有证据支持的分歧" in rendered
+    assert "task_target_report" not in rendered
+    assert "ev_user_report" not in rendered

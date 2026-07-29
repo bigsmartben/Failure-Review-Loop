@@ -22,6 +22,7 @@ function run(id = "20260724T140000Z_test-project_a1b2c3", hash = "0") {
     run_id: id,
     parameters: {
       project_id: "test-project",
+      target_root: "C:/work/test-project",
       contract_revision: CONTRACT_REVISION,
       contract_bundle_hash: CONTRACT_BUNDLE_HASH,
       improvement_target_ids: ["target"],
@@ -154,7 +155,7 @@ test("baseline discovery keeps only the seven most recent comparable metrics", a
       conversations: records.map((record) => ({
         conversation_id: record.conversation_id,
         project_id: "test-project",
-        binding_method: "explicit_conversation_id",
+        match_method: "target_cwd",
         has_events_before_window: false,
         has_events_after_window: false,
         records: [{

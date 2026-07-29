@@ -32,7 +32,7 @@ from .validation import (
     validate_source_records,
     validate_trend,
 )
-from .workspace import Workspace, inspect_agent_configuration, load_workspace
+from .workspace import Workspace, inspect_agent_configuration, load_workspace, slug
 
 STAGES = ("collector", "analyst", "metrics", "trend", "optimizer")
 ARCHIVE_FILES = (
@@ -185,58 +185,24 @@ def _fail(
 
 
 @contextmanager
-def _project_lock(workspace: Workspace, run_id: str) -> Iterator[None]:
-    lock = workspace.locks_dir / f"{workspace.project_id}.lock"
+def _project_lock(
+    workspace: Workspace,
+    project_id: str,
+    run_id: str,
+) -> Iterator[None]:
+    lock = workspace.locks_dir / f"{project_id}.lock"
     try:
         lock.mkdir(parents=True, exist_ok=False)
     except FileExistsError as exc:
         raise SddFrlError(
             "OVERLAPPING_RUN",
-            f"项目 {workspace.project_id} 已有活动运行。",
+            f"项目 {project_id} 已有活动运行。",
         ) from exc
     write_json_atomic(lock / "owner.json", {"run_id": run_id, "acquired_at": utc_now()})
     try:
         yield
     finally:
         shutil.rmtree(lock, ignore_errors=True)
-
-
-def _normalize_targets(workspace: Workspace) -> tuple[list[dict[str, Any]], dict[str, str]]:
-    targets = []
-    snapshots: dict[str, str] = {}
-    ids: set[str] = set()
-    paths: set[str] = set()
-    for index, item in enumerate(workspace.config.get("improvement_targets", [])):
-        if not isinstance(item, dict):
-            raise SddFrlError(
-                "IMPROVEMENT_TARGET_INVALID",
-                f"improvement_targets[{index}] 必须是对象。",
-            )
-        target_id = item.get("id")
-        target_type = item.get("type")
-        if (
-            not isinstance(target_id, str)
-            or target_id in ids
-            or target_type not in {"skill", "agents", "prompt", "script", "template"}
-        ):
-            raise SddFrlError("IMPROVEMENT_TARGET_INVALID", f"无效改进载体：{item}")
-        candidate = Path(item.get("path", ""))
-        if not candidate.is_absolute():
-            candidate = workspace.analysis_root / candidate
-        resolved = ensure_within(
-            workspace.analysis_root,
-            candidate,
-            "ANALYSIS_TARGET_PATH_ESCAPE",
-        )
-        key = str(resolved).lower()
-        if key in paths or not resolved.is_file():
-            raise SddFrlError("IMPROVEMENT_TARGET_INVALID", f"无效改进载体路径：{resolved}")
-        ids.add(target_id)
-        paths.add(key)
-        digest = sha256(resolved.read_bytes())
-        targets.append({"id": target_id, "type": target_type, "path": str(resolved)})
-        snapshots[target_id] = digest
-    return targets, snapshots
 
 
 def _target_manifest(
@@ -349,7 +315,7 @@ def _prepare_run(
     run_id: str | None,
     parameters: dict[str, Any],
 ) -> tuple[dict[str, Any], Path]:
-    resolved_id = run_id or create_run_id(workspace.project_id)
+    resolved_id = run_id or create_run_id(parameters["project_id"])
     run_dir = ensure_within(workspace.root, workspace.runs_dir / resolved_id)
     run_file = run_dir / "run.json"
     run_dir.mkdir(parents=True, exist_ok=True)
@@ -381,8 +347,8 @@ def _load_run(workspace: Workspace, run_id: str) -> tuple[dict[str, Any], Path, 
     run_file = run_dir / "run.json"
     run = read_json(run_file)
     validate_schema("run", run)
-    if run.get("run_id") != run_id or run["parameters"]["project_id"] != workspace.project_id:
-        raise SddFrlError("RUN_IDENTITY_MISMATCH", "run_id 或 project_id 与当前工作区不一致。")
+    if run.get("run_id") != run_id:
+        raise SddFrlError("RUN_IDENTITY_MISMATCH", "run_id 与运行目录不一致。")
     return run, run_dir, run_file
 
 
@@ -509,6 +475,7 @@ def _finalize_artifacts(
     report, published = publish_report(
         workspace=workspace,
         raw_report=raw_report,
+        project_id=run["parameters"]["project_id"],
         review_date=review_date,
         status=run["status"],
     )
@@ -543,7 +510,7 @@ def _compute_after_findings(
     baseline = _baseline_metrics(
         workspace,
         current_run_id=run["run_id"],
-        project_id=workspace.project_id,
+        project_id=params["project_id"],
         target_ids=params["improvement_target_ids"],
         contract_hash=params["contract_bundle_hash"],
         before=metrics["generated_at"],
@@ -600,20 +567,25 @@ def _compute_after_findings(
 def prepare_review(
     path: str | Path,
     *,
+    target: str | Path,
     review_date: str | None = None,
     window_start: str | None = None,
     window_end: str | None = None,
-    project_id: str | None = None,
     run_id: str | None = None,
     now: datetime | None = None,
 ) -> dict[str, Any]:
     workspace = load_workspace(path)
     inspect_agent_configuration(workspace.root)
-    if project_id and project_id != workspace.project_id:
+    requested_target = Path(target).expanduser()
+    if not requested_target.is_absolute():
         raise SddFrlError(
-            "WORKSPACE_PROJECT_MISMATCH",
-            f"参数项目 {project_id} 与工作区项目 {workspace.project_id} 不一致。",
+            "TARGET_PATH_NOT_ABSOLUTE",
+            "目标必须是绝对路径。",
         )
+    target_root = requested_target.resolve()
+    if not target_root.is_dir():
+        raise SddFrlError("TARGET_NOT_DIRECTORY", f"目标不是目录：{target_root}")
+    project_id = slug(target_root.name)
     start, end, selected_date = review_window(
         workspace.timezone,
         review_date=review_date,
@@ -622,10 +594,12 @@ def prepare_review(
         now=now,
     )
     contract_hash = contract_bundle_hash()
-    targets, snapshots = _normalize_targets(workspace)
+    targets: list[dict[str, Any]] = []
+    snapshots: dict[str, str] = {}
     pending_manifest = _target_manifest("pending", targets, snapshots)
     parameters = {
-        "project_id": workspace.project_id,
+        "project_id": project_id,
+        "target_root": str(target_root),
         "window_start": start,
         "window_end": end,
         "timezone": workspace.timezone,
@@ -644,16 +618,22 @@ def prepare_review(
         _target_manifest(run["run_id"], targets, snapshots),
     )
 
-    with _project_lock(workspace, run["run_id"]):
+    with _project_lock(workspace, project_id, run["run_id"]):
         try:
             _stage_start(run_file, run, "collector", "COLLECTING")
-            source = collect_source_packet(workspace, start, end)
+            source = collect_source_packet(
+                workspace,
+                target_root,
+                project_id,
+                start,
+                end,
+            )
             write_json_atomic(run_dir / "source-records.json", source)
             validate_source_records(source)
-            if source["empty_reason"] == "ANALYSIS_TARGET_CONVERSATIONS_NOT_FOUND":
+            if source["empty_reason"] == "TARGET_CONVERSATIONS_NOT_FOUND":
                 raise SddFrlError(
-                    "ANALYSIS_TARGET_CONVERSATIONS_NOT_FOUND",
-                    "Codex session 数据源可读，但没有对话能绑定当前分析目标。",
+                    "TARGET_CONVERSATIONS_NOT_FOUND",
+                    "Codex session 数据源可读，但没有找到属于本次目标的对话。",
                 )
             evidence = build_evidence(
                 source,
@@ -743,8 +723,8 @@ def continue_review(
     if stage not in {"analyst", "optimizer"}:
         raise SddFrlError("STAGE_ORDER_INVALID", f"不支持的继续阶段：{stage}。")
     expected_status = "ANALYZING" if stage == "analyst" else "OPTIMIZING"
-    with _project_lock(workspace, run_id):
-        run, run_dir, run_file = _load_run(workspace, run_id)
+    run, run_dir, run_file = _load_run(workspace, run_id)
+    with _project_lock(workspace, run["parameters"]["project_id"], run_id):
         if run["status"] != expected_status or run["stages"][stage]["status"] != "running":
             raise SddFrlError(
                 "STAGE_ORDER_INVALID",
@@ -756,7 +736,7 @@ def continue_review(
             value = _candidate_value(run_dir, stage, input_file)
             if (
                 value.get("run_id") != run_id
-                or value.get("project_id") != workspace.project_id
+                or value.get("project_id") != run["parameters"]["project_id"]
             ):
                 raise SddFrlError(
                     "RUN_IDENTITY_MISMATCH",
@@ -846,27 +826,27 @@ def finalize_review(path: str | Path, *, run_id: str) -> dict[str, Any]:
             "STAGE_ORDER_INVALID",
             f"运行 {run_id} 尚未到达可收尾状态：{run['status']}。",
         )
-    with _project_lock(workspace, run_id):
+    with _project_lock(workspace, run["parameters"]["project_id"], run_id):
         return _finalize_artifacts(workspace, run=run, run_dir=run_dir)
 
 
 def run_review(
     path: str | Path,
     *,
+    target: str | Path,
     review_date: str | None = None,
     window_start: str | None = None,
     window_end: str | None = None,
-    project_id: str | None = None,
     run_id: str | None = None,
     now: datetime | None = None,
 ) -> dict[str, Any]:
     """Compatibility entry point: prepare only; never launches a nested Codex process."""
     return prepare_review(
         path,
+        target=target,
         review_date=review_date,
         window_start=window_start,
         window_end=window_end,
-        project_id=project_id,
         run_id=run_id,
         now=now,
     )

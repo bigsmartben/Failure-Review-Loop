@@ -79,11 +79,11 @@ function validateSourceRecords(data, errors) {
       "empty_reason must be null when records were collected."
     ));
   } else if (recordCount === 0 && data.conversations.length === 0 &&
-      data.empty_reason !== "ANALYSIS_TARGET_CONVERSATIONS_NOT_FOUND") {
+      data.empty_reason !== "TARGET_CONVERSATIONS_NOT_FOUND") {
     errors.push(issue(
       "SOURCE_RECORDS_EMPTY_REASON_INVALID",
       "/empty_reason",
-      "Missing target conversations require ANALYSIS_TARGET_CONVERSATIONS_NOT_FOUND."
+      "Missing target conversations require TARGET_CONVERSATIONS_NOT_FOUND."
     ));
   } else if (recordCount === 0 && data.conversations.length > 0 &&
       !["NO_EVENTS_IN_WINDOW", "EVENTS_IN_WINDOW_UNCOLLECTABLE"].includes(data.empty_reason)) {
@@ -410,6 +410,43 @@ function validateFindings(data, context, signatureRegistry, errors) {
           return record?.event_type === "message" && record.actor === "user";
         })) {
       errors.push(issue("EXPLICIT_OUTCOME_MISSING_USER_MESSAGE", `${base}/outcome_evidence_ids`, "Explicit user outcomes require user-message evidence."));
+    }
+    const divergenceIds = new Set();
+    for (const [divergenceIndex, divergence] of task.divergences.entries()) {
+      const divergenceBase = `${base}/divergences/${divergenceIndex}`;
+      if (divergenceIds.has(divergence.divergence_id)) {
+        errors.push(issue("DUPLICATE_DIVERGENCE_ID", `${divergenceBase}/divergence_id`, "divergence_id must be unique inside a task."));
+      }
+      divergenceIds.add(divergence.divergence_id);
+      if (!divergence.evidence_ids.every((id) => task.evidence_ids.includes(id))) {
+        errors.push(issue("DIVERGENCE_EVIDENCE_OUTSIDE_TASK", `${divergenceBase}/evidence_ids`, "Divergence evidence must belong to its task."));
+      }
+      const actors = new Set(divergence.evidence_ids
+        .map((id) => evidenceById.get(id)?.actor)
+        .filter(Boolean));
+      if (!actors.has("user") || !actors.has("assistant")) {
+        errors.push(issue("DIVERGENCE_REQUIRES_BOTH_SIDES", `${divergenceBase}/evidence_ids`, "Divergence evidence must include user and assistant messages."));
+      }
+    }
+    const alignmentIds = new Set();
+    for (const [alignmentIndex, alignment] of task.alignments.entries()) {
+      const alignmentBase = `${base}/alignments/${alignmentIndex}`;
+      if (alignmentIds.has(alignment.alignment_id)) {
+        errors.push(issue("DUPLICATE_ALIGNMENT_ID", `${alignmentBase}/alignment_id`, "alignment_id must be unique inside a task."));
+      }
+      alignmentIds.add(alignment.alignment_id);
+      if (!alignment.evidence_ids.every((id) => task.evidence_ids.includes(id))) {
+        errors.push(issue("ALIGNMENT_EVIDENCE_OUTSIDE_TASK", `${alignmentBase}/evidence_ids`, "Alignment evidence must belong to its task."));
+      }
+      if (alignment.divergence_id !== null && !divergenceIds.has(alignment.divergence_id)) {
+        errors.push(issue("ALIGNMENT_DIVERGENCE_UNKNOWN", `${alignmentBase}/divergence_id`, "Alignment references an unknown divergence."));
+      }
+    }
+    for (const [divergenceIndex, divergence] of task.divergences.entries()) {
+      if (divergence.status === "resolved" &&
+          !task.alignments.some((alignment) => alignment.divergence_id === divergence.divergence_id)) {
+        errors.push(issue("RESOLVED_DIVERGENCE_WITHOUT_ALIGNMENT", `${base}/divergences/${divergenceIndex}`, "Resolved divergence requires a linked alignment."));
+      }
     }
   }
 
