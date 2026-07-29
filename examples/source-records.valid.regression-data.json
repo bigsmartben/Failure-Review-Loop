@@ -19,7 +19,7 @@
     {
       "conversation_id": "conv-regression-1",
       "project_id": "harness",
-      "binding_method": "analysis_target_workspace_root",
+      "match_method": "target_cwd",
       "has_events_before_window": false,
       "has_events_after_window": false,
       "records": [

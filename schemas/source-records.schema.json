@@ -26,7 +26,7 @@
         null,
         "NO_EVENTS_IN_WINDOW",
         "EVENTS_IN_WINDOW_UNCOLLECTABLE",
-        "ANALYSIS_TARGET_CONVERSATIONS_NOT_FOUND"
+        "TARGET_CONVERSATIONS_NOT_FOUND"
       ]
     },
     "collection_summary": { "$ref": "#/$defs/collection_summary" },
@@ -66,7 +66,7 @@
       "required": [
         "conversation_id",
         "project_id",
-        "binding_method",
+        "match_method",
         "has_events_before_window",
         "has_events_after_window",
         "records"
@@ -74,13 +74,7 @@
       "properties": {
         "conversation_id": { "type": "string", "minLength": 1 },
         "project_id": { "type": "string", "minLength": 1 },
-        "binding_method": {
-          "enum": [
-            "explicit_conversation_id",
-            "analysis_target_workspace_root",
-            "project_marker_plus_workspace_root"
-          ]
-        },
+        "match_method": { "const": "target_cwd" },
         "has_events_before_window": { "type": "boolean" },
         "has_events_after_window": { "type": "boolean" },
         "records": {
@@ -122,7 +116,7 @@
         "source_location": { "type": "string", "minLength": 1 },
         "content_or_reference": { "type": "string", "minLength": 1 },
         "content_hash": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
-        "collection_status": { "enum": ["collected", "referenced", "redacted"] }
+        "collection_status": { "enum": ["collected", "referenced"] }
       }
     }
   }

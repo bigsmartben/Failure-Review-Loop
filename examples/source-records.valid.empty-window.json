@@ -19,7 +19,7 @@
     {
       "conversation_id": "target-conversation",
       "project_id": "harness",
-      "binding_method": "analysis_target_workspace_root",
+      "match_method": "target_cwd",
       "has_events_before_window": true,
       "has_events_after_window": true,
       "records": []

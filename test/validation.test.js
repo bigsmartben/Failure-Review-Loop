@@ -18,6 +18,7 @@ const run = {
   run_id: "20260724T140000Z_test-project_a1b2c3",
   parameters: {
     project_id: "test-project",
+    target_root: "C:/work/test-project",
     window_start: "2026-07-24T00:00:00Z",
     window_end: "2026-07-25T00:00:00Z",
     timezone: "UTC",
@@ -30,6 +31,65 @@ const run = {
     target_set_hash: `sha256:${"0".repeat(64)}`
   }
 };
+
+test("resolved task divergence requires user-agent evidence and linked alignment", async () => {
+  const records = [
+    evidenceRecord("ev_user", "conv-detail", "2026-07-24T01:00:00Z", "目标项目报告", {
+      sequence: 0,
+      actor: "user"
+    }),
+    evidenceRecord("ev_agent", "conv-detail", "2026-07-24T01:01:00Z", "E2E 验收报告", {
+      sequence: 1,
+      actor: "assistant"
+    }),
+    evidenceRecord("ev_alignment", "conv-detail", "2026-07-24T01:02:00Z", "重新生成目标报告", {
+      sequence: 2,
+      actor: "user"
+    })
+  ];
+  const task = taskEpisode("detail", "conv-detail", records.map((item) => item.evidence_id), {
+    startSequence: 0,
+    endSequence: 2,
+    outcomeEvidenceIds: ["ev_alignment"],
+    counts: {
+      turn_count: 3,
+      clarification_count: 0,
+      repeated_clarification_count: 0,
+      execution_attempt_count: 1,
+      rework_count: 0
+    }
+  });
+  task.divergences = [{
+    divergence_id: "divergence_report_subject",
+    summary: "报告对象识别错误",
+    user_expectation: "分析目标项目",
+    agent_behavior: "分析了 E2E 验收",
+    status: "resolved",
+    root_cause: "Prompt 未区分目标与运行过程。",
+    optimization_target: "prompt",
+    optimization_direction: "固定使用运行参数中的目标。",
+    acceptance_check: "报告正文只描述目标项目。",
+    evidence_ids: ["ev_user", "ev_agent"]
+  }];
+  task.alignments = [{
+    alignment_id: "alignment_report_subject",
+    divergence_id: "divergence_report_subject",
+    summary: "重新确认分析目标项目。",
+    resulting_action: "重新生成报告。",
+    evidence_ids: ["ev_alignment"]
+  }];
+  const artifact = findings(run.run_id, [task]);
+  const evidence = evidenceArtifact(run.run_id, records);
+
+  const valid = await validateArtifact("findings", artifact, { run, evidence }, ROOT);
+  assert.equal(valid.valid, true, JSON.stringify(valid.errors));
+
+  task.alignments = [];
+  const invalid = await validateArtifact("findings", artifact, { run, evidence }, ROOT);
+  assert.equal(invalid.valid, false);
+  assert(invalid.errors.some((error) =>
+    error.code === "RESOLVED_DIVERGENCE_WITHOUT_ALIGNMENT"));
+});
 
 test("five repetitions inside one task do not pass the high-frequency gate", async () => {
   const records = Array.from({ length: 6 }, (_, index) =>

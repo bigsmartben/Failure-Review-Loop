@@ -15,7 +15,7 @@ SOURCE_KIND = "local_codex_sessions_jsonl"
 EMPTY_REASONS = frozenset({
     "NO_EVENTS_IN_WINDOW",
     "EVENTS_IN_WINDOW_UNCOLLECTABLE",
-    "ANALYSIS_TARGET_CONVERSATIONS_NOT_FOUND",
+    "TARGET_CONVERSATIONS_NOT_FOUND",
 })
 SUMMARY_FIELDS = (
     "session_files_scanned",
@@ -28,18 +28,6 @@ SUMMARY_FIELDS = (
     "skipped_uncollectable",
 )
 
-REDACTION_RULES = (
-    (re.compile(r"\bsk-[A-Za-z0-9_-]{16,}\b"), "[REDACTED_OPENAI_KEY]"),
-    (re.compile(r"\bgh[opurs]_[A-Za-z0-9]{20,}\b"), "[REDACTED_GITHUB_TOKEN]"),
-    (re.compile(r"\bBearer\s+[A-Za-z0-9._~+/=-]{12,}", re.IGNORECASE), "Bearer [REDACTED]"),
-    (
-        re.compile(
-            r"(password|passwd|secret|token|api[_-]?key)\s*[:=]\s*[^\s,;\"']+",
-            re.IGNORECASE,
-        ),
-        r"\1=[REDACTED]",
-    ),
-)
 ARTIFACT_PATTERN = re.compile(
     r"(?:[A-Za-z]:[\\/][^\s\"'<>|]+|(?:\.{0,2}[\\/])?"
     r"[A-Za-z0-9_.-]+(?:[\\/][A-Za-z0-9_.-]+)*\."
@@ -52,13 +40,6 @@ def parse_datetime(value: str) -> datetime:
     result = datetime.fromisoformat(normalized)
     if result.tzinfo is None:
         raise ValueError(f"Timestamp must include an offset: {value}")
-    return result
-
-
-def redact(value: str) -> str:
-    result = value
-    for pattern, replacement in REDACTION_RULES:
-        result = pattern.sub(replacement, result)
     return result
 
 
@@ -205,79 +186,31 @@ def _session_files(workspace: Workspace) -> tuple[Path, list[Path]]:
     return sessions, files
 
 
-def _binding_method(
+def _match_method(
     meta: dict[str, Any],
     *,
-    explicit_ids: set[str],
-    analysis_root: Path,
+    target_root: Path,
 ) -> tuple[str | None, str | None]:
     conversation_id = meta.get("id") or meta.get("session_id")
     if not isinstance(conversation_id, str) or not conversation_id:
         return None, None
-    if conversation_id in explicit_ids:
-        return conversation_id, "explicit_conversation_id"
     cwd = meta.get("cwd")
     if not isinstance(cwd, str) or not cwd:
         return conversation_id, None
-    if _inside(Path(cwd), analysis_root):
-        return conversation_id, "analysis_target_workspace_root"
-    return conversation_id, "outside_analysis_target"
-
-
-def probe_source(workspace: Workspace) -> dict[str, Any]:
-    sessions = _codex_home(workspace) / "sessions"
-    try:
-        _, files = _session_files(workspace)
-    except SddFrlError as error:
-        return {
-            "source_kind": SOURCE_KIND,
-            "sessions_root": str(sessions),
-            "available": False,
-            "session_files_scanned": 0,
-            "target_conversations_matched": 0,
-            "target_binding_verified": False,
-            "blocker_codes": [error.code],
-        }
-
-    explicit_ids = set(workspace.config.get("conversation_ids", []))
-    matched: set[str] = set()
-    for file in files:
-        try:
-            meta = _session_meta(file)
-        except (OSError, json.JSONDecodeError):
-            continue
-        if not meta:
-            continue
-        conversation_id, binding = _binding_method(
-            meta,
-            explicit_ids=explicit_ids,
-            analysis_root=workspace.analysis_root,
-        )
-        if conversation_id and binding in {
-            "explicit_conversation_id",
-            "analysis_target_workspace_root",
-        }:
-            matched.add(conversation_id)
-    blockers = [] if matched else ["ANALYSIS_TARGET_CONVERSATIONS_NOT_FOUND"]
-    return {
-        "source_kind": SOURCE_KIND,
-        "sessions_root": str(sessions),
-        "available": True,
-        "session_files_scanned": len(files),
-        "target_conversations_matched": len(matched),
-        "target_binding_verified": bool(matched),
-        "blocker_codes": blockers,
-    }
+    if _inside(Path(cwd), target_root):
+        return conversation_id, "target_cwd"
+    return conversation_id, "outside_target"
 
 
 def collect_source_packet(
     workspace: Workspace,
+    target_root: Path,
+    project_id: str,
     window_start: str,
     window_end: str,
 ) -> dict[str, Any]:
     start = parse_datetime(window_start)
     end = parse_datetime(window_end)
-    explicit_ids = set(workspace.config.get("conversation_ids", []))
     _, files = _session_files(workspace)
     conversations: list[dict[str, Any]] = []
     matched_conversation_ids: set[str] = set()
@@ -294,15 +227,14 @@ def collect_source_packet(
         if not meta:
             summary["skipped_missing_meta"] += 1
             continue
-        conversation_id, binding_method = _binding_method(
+        conversation_id, match_method = _match_method(
             meta,
-            explicit_ids=explicit_ids,
-            analysis_root=workspace.analysis_root,
+            target_root=target_root,
         )
-        if conversation_id is None or binding_method is None:
+        if conversation_id is None or match_method is None:
             summary["skipped_missing_meta"] += 1
             continue
-        if binding_method == "outside_analysis_target":
+        if match_method == "outside_target":
             summary["skipped_outside_target"] += 1
             continue
         if conversation_id in matched_conversation_ids:
@@ -352,8 +284,6 @@ def collect_source_packet(
                         summary["records_after_window"] += 1
                         continue
                     content = str(item["content"])
-                    if workspace.config.get("privacy", {}).get("content_mode") == "redact_secrets":
-                        content = redact(content)
                     record = {
                         "conversation_id": conversation_id,
                         "timestamp": timestamp_value,
@@ -368,8 +298,6 @@ def collect_source_packet(
                         "collection_status": (
                             "referenced"
                             if item["event_type"] == "artifact_reference"
-                            else "redacted"
-                            if content != str(item["content"])
                             else "collected"
                         ),
                     }
@@ -393,15 +321,15 @@ def collect_source_packet(
             summary["skipped_uncollectable"] += 1
         conversations.append({
             "conversation_id": conversation_id,
-            "project_id": workspace.project_id,
-            "binding_method": binding_method,
+            "project_id": project_id,
+            "match_method": match_method,
             "has_events_before_window": before,
             "has_events_after_window": after,
             "records": records,
         })
 
     if summary["target_conversations_matched"] == 0:
-        empty_reason = "ANALYSIS_TARGET_CONVERSATIONS_NOT_FOUND"
+        empty_reason = "TARGET_CONVERSATIONS_NOT_FOUND"
     elif summary["records_in_window"] > 0:
         empty_reason = None
     elif raw_events_in_window > 0:
@@ -411,7 +339,7 @@ def collect_source_packet(
     return {
         "schema_version": "1.0.0",
         "source_kind": SOURCE_KIND,
-        "project_id": workspace.project_id,
+        "project_id": project_id,
         "window_start": window_start,
         "window_end": window_end,
         "empty_reason": empty_reason,

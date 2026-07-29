@@ -17,7 +17,9 @@ test("actionable findings match the shared golden contract", async () => {
   assert.equal(normalizedLines(rendered), normalizedLines(await readFile(GOLDEN, "utf8")));
   assert(!rendered.includes("sk-live-super-secret"));
   assert(!rendered.includes("C:\\Users\\Alice"));
-  assert.match(rendered, /EVIDENCE_POINTER_UNRESOLVED/);
-  assert.match(rendered, /同一任务关联 2 个问题簇/);
-  assert.match(rendered, /证据不足，根因尚未确认/);
+  assert.match(rendered, /报告对象识别错误（已解决）/);
+  assert.match(rendered, /优化对象：Prompt/);
+  assert.match(rendered, /未发现有证据支持的分歧/);
+  assert(!rendered.includes("task_target_report"));
+  assert(!rendered.includes("ev_user_report"));
 });

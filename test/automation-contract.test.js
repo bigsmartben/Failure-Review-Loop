@@ -10,38 +10,33 @@ async function readProjectFile(relativePath) {
   return readFile(path.join(rootDir, relativePath), "utf8");
 }
 
-test("quickstart separates the FRL workspace from the analysis target", async () => {
-  const readme = await readProjectFile("README.md");
+test("quickstart contains only the fixed three user steps", async () => {
   const quickstart = await readProjectFile("quickstart.md");
-  const prompt = await readProjectFile(path.join("automation", "task-prompt.md"));
 
-  assert.match(readme, /维护者（maintainer）/);
-  assert.match(readme, /sdd-frl probe \./);
-  assert.match(readme, /\.sdd-frl\/runs\/<run_id>\//);
-  assert.doesNotMatch(readme, /请读取当前项目的 `.sdd-frl\/automation\/task-prompt\.md`/);
-  assert.match(quickstart, /使用者快速开始/);
-  assert.match(quickstart, /sdd-frl init \. --analysis-target/);
-  assert.match(quickstart, /复制、粘贴、发送/);
-  assert.match(quickstart, /请读取当前项目的 `.sdd-frl\/automation\/task-prompt\.md`/);
-  assert.match(quickstart, /docs\/failure-review\/YYYY-MM-DD\.md/);
-  assert.doesNotMatch(quickstart, /sdd-frl probe \./);
-  assert.doesNotMatch(quickstart, /\.sdd-frl\/runs\/<run_id>\//);
+  assert.equal((quickstart.match(/^## /gm) ?? []).length, 3);
+  assert.match(quickstart, /uv tool install/);
+  assert.match(quickstart, /sdd-frl init \./);
+  assert.match(
+    quickstart,
+    /请读取 `.sdd-frl\/automation\/task-prompt\.md`，为以下分析目标创建一个独立的 FRL 定时任务。/
+  );
+  assert.match(quickstart, /分析目标：<目标项目绝对路径>/);
   assert.equal((quickstart.match(/```text/g) ?? []).length, 1);
-  assert.match(quickstart, /本地项目/);
-  assert.match(prompt, /只在 FRL 工作区执行 CLI，只复盘绑定的另一个 Codex 项目目录/);
-  assert.match(prompt, /所有中间产物、锁和最终文档必须留在 FRL 工作区；分析目标只读/);
-  assert.match(prompt, /prepare → continue → finalize/);
-  assert.match(prompt, /sdd_frl_analyst/);
-  assert.match(prompt, /sdd_frl_optimizer/);
-  assert.match(prompt, /禁止在 Python\/CLI 中嵌套调用 `codex exec`/);
+  assert.doesNotMatch(quickstart, /运行状态机|手工|内部|权限|确认卡/);
 });
 
-test("automation onboarding exposes only the three user operations", async () => {
+test("scheduled task contract uses one runtime target with stable defaults", async () => {
+  const readme = await readProjectFile("README.md");
+  const prompt = await readProjectFile(path.join("automation", "task-prompt.md"));
   const guide = await readProjectFile(path.join("automation", "README.md"));
 
-  assert.match(guide, /用户只有三步操作/);
-  assert.match(guide, /uv tool install/);
-  assert.match(guide, /sdd-frl init \. --analysis-target/);
-  assert.match(guide, /FRL 工作区根目录 `quickstart\.md`/);
-  assert.doesNotMatch(guide, /手工运行一次/);
+  assert.match(readme, /目标路径不写入 `.sdd-frl\/config\.json`/);
+  assert.match(readme, /sdd-frl prepare \. --target/);
+  assert.match(prompt, /缺失时只询问分析目标，不猜测、不扫描/);
+  assert.match(prompt, /多个目标不能合并到一个任务/);
+  assert.match(prompt, /运行频率默认每天，运行时间默认 `22:00`/);
+  assert.match(prompt, /当前目录是内部固定运行目录，不询问/);
+  assert.match(prompt, /确认卡和完成回复只包含分析目标、运行频率、运行时间及启用状态/);
+  assert.match(guide, /各任务分别保存自己的目标、运行频率和运行时间，\s*互不影响/);
+  assert.match(guide, /目标路径只进入对应任务及该任务产生的 `run\.json`/);
 });

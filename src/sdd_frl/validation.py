@@ -70,10 +70,10 @@ def validate_source_records(source: dict[str, Any]) -> None:
                 "窗口内存在记录时 empty_reason 必须为 null。",
             )
     elif summary["target_conversations_matched"] == 0:
-        if reason != "ANALYSIS_TARGET_CONVERSATIONS_NOT_FOUND":
+        if reason != "TARGET_CONVERSATIONS_NOT_FOUND":
             raise SddFrlError(
                 "SOURCE_RECORDS_EMPTY_REASON_INVALID",
-                "未匹配目标对话时必须使用 ANALYSIS_TARGET_CONVERSATIONS_NOT_FOUND。",
+                "未匹配目标对话时必须使用 TARGET_CONVERSATIONS_NOT_FOUND。",
             )
     elif reason not in {
         "NO_EVENTS_IN_WINDOW",
@@ -268,6 +268,9 @@ def validate_findings(
     if findings["project_id"] != run["parameters"]["project_id"]:
         raise SddFrlError("FINDINGS_SCOPE_MISMATCH", "findings.project_id 与 run 不一致。")
     valid_ids = {item["evidence_id"] for item in evidence["records"]}
+    evidence_by_id = {
+        item["evidence_id"]: item for item in evidence["records"]
+    }
     covered_user_ids = set()
     for task in findings["task_episodes"]:
         referenced = set(task["evidence_ids"])
@@ -295,6 +298,63 @@ def validate_findings(
         for key, value in expected_counts.items():
             if task["counts"][key] != value:
                 raise SddFrlError("FINDINGS_COUNT_MISMATCH", f"{key} 与 interaction_events 不一致。")
+        divergence_ids = {
+            item["divergence_id"] for item in task["divergences"]
+        }
+        if len(divergence_ids) != len(task["divergences"]):
+            raise SddFrlError(
+                "FINDINGS_DIVERGENCE_ID_DUPLICATE",
+                "同一任务的 divergence_id 必须唯一。",
+            )
+        alignment_ids = {
+            item["alignment_id"] for item in task["alignments"]
+        }
+        if len(alignment_ids) != len(task["alignments"]):
+            raise SddFrlError(
+                "FINDINGS_ALIGNMENT_ID_DUPLICATE",
+                "同一任务的 alignment_id 必须唯一。",
+            )
+        for alignment in task["alignments"]:
+            alignment_evidence = set(alignment["evidence_ids"])
+            if not alignment_evidence <= referenced:
+                raise SddFrlError(
+                    "FINDINGS_ALIGNMENT_EVIDENCE_INVALID",
+                    "对齐证据必须属于对应任务。",
+                )
+            divergence_id = alignment["divergence_id"]
+            if divergence_id is not None and divergence_id not in divergence_ids:
+                raise SddFrlError(
+                    "FINDINGS_ALIGNMENT_REFERENCE_INVALID",
+                    "对齐引用了不存在的分歧。",
+                )
+        for divergence in task["divergences"]:
+            divergence_evidence = set(divergence["evidence_ids"])
+            if not divergence_evidence <= referenced:
+                raise SddFrlError(
+                    "FINDINGS_DIVERGENCE_EVIDENCE_INVALID",
+                    "分歧证据必须属于对应任务。",
+                )
+            actors = {
+                evidence_by_id[item]["actor"]
+                for item in divergence_evidence
+                if item in evidence_by_id
+            }
+            if not {"user", "assistant"} <= actors:
+                raise SddFrlError(
+                    "FINDINGS_DIVERGENCE_EVIDENCE_INVALID",
+                    "分歧必须同时引用用户和 Agent 消息。",
+                )
+            if (
+                divergence["status"] == "resolved"
+                and not any(
+                    item["divergence_id"] == divergence["divergence_id"]
+                    for item in task["alignments"]
+                )
+            ):
+                raise SddFrlError(
+                    "FINDINGS_RESOLVED_WITHOUT_ALIGNMENT",
+                    "已解决分歧必须关联至少一条对齐记录。",
+                )
     excluded = {item["evidence_id"] for item in findings["excluded_evidence"]}
     user_ids = {
         item["evidence_id"] for item in evidence["records"] if item["actor"] == "user"
