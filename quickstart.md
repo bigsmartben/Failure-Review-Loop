@@ -5,7 +5,7 @@
 ## 1. 安装
 
 ```powershell
-uv tool install "sdd-frl @ git+ssh://git@github.com/bigsmartben/Failure-Review-Loop.git@v0.4.1"
+uv tool install "sdd-frl @ git+ssh://git@github.com/bigsmartben/Failure-Review-Loop.git@v0.5.0"
 ```
 
 ## 2. 初始化当前本地目录
